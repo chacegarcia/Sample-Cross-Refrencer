@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LCM Sample Configurator (Foam Only)</title>
+  <title>LCM Sample Configurator</title>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
@@ -37,9 +37,9 @@
 </head>
 
 <body>
-  <h2>LCM Sample Configurator (Foam Only)</h2>
+  <h2>LCM Sample Configurator</h2>
   <div class="muted">
-    Run from a local server (VS Code Live Server / http://localhost:5500). The favicon 404 is normal.
+    Enter in requested part details below, Export will give manufacturing BOM
   </div>
 
   <div class="card">
@@ -484,8 +484,17 @@ async function loadAll(){
   const s2 = wb.Sheets[wb.SheetNames[1]];
 
   foamRows = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
-  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
+  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);// ---- NEW: LOAD WOOL SHEETS ----
+const s3 = wb.Sheets[wb.SheetNames[2]];
+const s4 = wb.Sheets[wb.SheetNames[3]];
+
+woolRows  = XLSX.utils.sheet_to_json(s3, {defval:""});
+stackRows = XLSX.utils.sheet_to_json(s4, {defval:""});
+
+populateWool();   // <---- this is why nothing showed up before
+
   buildThkMaps();
+  
 
   setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
   setSelectOptions(els.foamThickness, [], "— Select Thickness —", false);
