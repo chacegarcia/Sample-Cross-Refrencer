@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>LCM Sample Configurator</title>
+  <title>LCM Sample Configurator (Foam Only)</title>
 
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
@@ -37,9 +37,9 @@
 </head>
 
 <body>
-  <h2>LCM Sample Configurator</h2>
+  <h2>LCM Sample Configurator (Foam Only)</h2>
   <div class="muted">
-    Enter in requested part details below, Export will give manufacturing BOM
+    Run from a local server (VS Code Live Server / http://localhost:5500). The favicon 404 is normal.
   </div>
 
   <div class="card">
@@ -81,7 +81,7 @@
       </div>
 
       <div class="row">
-        <label for="foamWheel">Wheel</label>
+        <label for="foamWheel">Pad Profile</label>
         <select id="foamWheel" disabled></select>
       </div>
 
@@ -484,17 +484,8 @@ async function loadAll(){
   const s2 = wb.Sheets[wb.SheetNames[1]];
 
   foamRows = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
-  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);// ---- NEW: LOAD WOOL SHEETS ----
-const s3 = wb.Sheets[wb.SheetNames[2]];
-const s4 = wb.Sheets[wb.SheetNames[3]];
-
-woolRows  = XLSX.utils.sheet_to_json(s3, {defval:""});
-stackRows = XLSX.utils.sheet_to_json(s4, {defval:""});
-
-populateWool();   // <---- this is why nothing showed up before
-
+  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
   buildThkMaps();
-  
 
   setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
   setSelectOptions(els.foamThickness, [], "— Select Thickness —", false);
@@ -622,45 +613,39 @@ els.foamNotes.addEventListener("input", updateDebugAndButtons);
 })();
 </script>
 
-<!-- Tufted Wool UI -->
-<div class="card">
-  <h3 style="margin:0 0 10px;">Tufted Wool Selection</h3>
-  <div class="grid">
-    <div class="row"><label>Final Pad Size</label><select id="woolPadSize"></select></div>
-    <div class="row"><label>Nap Length</label><select id="woolNap"></select></div>
-    <div class="row"><label>Orientation</label>
-      <select id="woolOrientation"><option value="">— Select —</option><option>Curved</option><option>Flat</option></select>
-    </div>
-    <div class="row"><label>Backing Type</label><select id="woolBacking"></select></div>
-    <div class="row"><label>Poly Type</label><select id="woolPoly"></select></div>
-    <div class="row"><label>Sturdyness (MIL)</label><select id="woolMil"></select></div>
-    <div class="row"><label>Print</label>
-      <select id="woolPrint"><option>No Print</option><option>LC Print</option><option>Customer Sample Print</option></select>
-    </div>
-  </div>
-</div>
-
 <script>
-// ===== WOOL ADDON =====
-let woolRows=[],stackRows=[];
-function woolInit(wb){
- const s3=wb.Sheets[wb.SheetNames[2]];
- const s4=wb.Sheets[wb.SheetNames[3]];
- woolRows=XLSX.utils.sheet_to_json(s3,{defval:""});
- stackRows=XLSX.utils.sheet_to_json(s4,{defval:""});
- populateWool();
+// ===== Wool stack population =====
+function populateStack(){
+  if(!window.stackRows||!window.woolRows)return;
+  const od=document.getElementById('woolPadSize')?.value;
+  const nap=document.getElementById('woolNap')?.value;
+  if(!od||!nap)return;
+  const base=woolRows.find(r=>String(r['Final OD']).trim()==od&&String(r['Nap Length']).trim()==nap);
+  if(!base)return;
+  const dia=String(base['Op Tufted Pad Dia']).trim();
+
+  const candidates=stackRows.filter(r=>String(r['Poly Dia']).trim()==dia);
+
+  const backingSel=document.getElementById('woolBacking');
+  const polySel=document.getElementById('woolPoly');
+  const milSel=document.getElementById('woolMil');
+
+  if(backingSel){
+    const backs=[...new Set(candidates.map(r=> (r['Loop']=='Y'?'Loop':(r['Canvas']=='Y'?'Canvas':''))).filter(Boolean))];
+    backingSel.innerHTML='<option></option>'+backs.map(v=>`<option>${v}</option>`).join('');
+  }
+  if(polySel){
+    const polys=[...new Set(candidates.map(r=>r['Poly Type']).filter(Boolean))];
+    polySel.innerHTML='<option></option>'+polys.map(v=>`<option>${v}</option>`).join('');
+  }
+  if(milSel){
+    const mils=[...new Set(candidates.map(r=>r['Poly Size MIL']).filter(Boolean))];
+    milSel.innerHTML='<option></option>'+mils.map(v=>`<option>${v}</option>`).join('');
+  }
 }
-function uniq(arr){return [...new Set(arr.filter(Boolean))];}
-function populateWool(){
- const sizeSel=document.getElementById("woolPadSize");
- if(!sizeSel) return;
- sizeSel.innerHTML='<option></option>'+uniq(woolRows.map(r=>r["Final OD"])).map(v=>`<option>${v}</option>`).join('');
-}
-document.addEventListener("change",e=>{
- if(e.target.id==="woolPadSize"){
-  const naps=uniq(woolRows.filter(r=>r["Final OD"]==e.target.value).map(r=>r["Nap Length"]));
-  document.getElementById("woolNap").innerHTML='<option></option>'+naps.map(v=>`<option>${v}</option>`).join('');
- }
+
+document.addEventListener('change',e=>{
+ if(e.target.id==='woolNap'||e.target.id==='woolPadSize'){setTimeout(populateStack,50);}
 });
 </script>
 
