@@ -147,6 +147,10 @@
         <label for="woolNap">Nap Length</label>
         <select id="woolNap" disabled></select>
       </div>
+      <div class="row">
+        <label for="woolYarn">Yarn</label>
+        <select id="woolYarn" disabled></select>
+      </div>
 
       <div class="row">
         <label for="woolOrientation">Orientation</label>
@@ -297,6 +301,7 @@ const els = {
 
   woolPadSize: $("woolPadSize"),
   woolNap: $("woolNap"),
+  woolYarn: $("woolYarn"),
   woolOrientation: $("woolOrientation"),
   woolBacking: $("woolBacking"),
   woolPoly: $("woolPoly"),
@@ -369,6 +374,7 @@ function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
 function populateWoolPadSizes(){
   setSelectOptions(els.woolPadSize, uniqSorted(woolRows, "Final OD"), "— Select Pad Size —", false);
   setSelectOptions(els.woolNap, [], "— Select Nap —", false);
+  setSelectOptions(els.woolYarn, [], "— Select Yarn —", false);
   setSelectOptions(els.woolBacking, [], "— Select Backing —", false);
   setSelectOptions(els.woolPoly, [], "— Select Poly —", false);
   setSelectOptions(els.woolMil, [], "— Select MIL —", false);
@@ -380,11 +386,28 @@ function recomputeWoolNap(){
   setSelectOptions(els.woolNap, naps, "— Select Nap —", true);
 }
 
+
+function recomputeWoolYarn(){
+  const od = els.woolPadSize.value;
+  const nap = els.woolNap.value;
+  const rows = woolRows.filter(r =>
+    (!od || normU(r["Final OD"]) === normU(od)) &&
+    (!nap || normU(r["Nap Length"]) === normU(nap))
+  );
+  const yarns = uniqSorted(rows, "Yarn");
+  setSelectOptions(els.woolYarn, yarns, "— Select Yarn —", true);
+}
+
 function resolveWoolBase(){
   const od = els.woolPadSize.value;
   const nap = els.woolNap.value;
-  if (!od || !nap) return null;
-  return woolRows.find(r => normU(r["Final OD"])===normU(od) && normU(r["Nap Length"])===normU(nap)) || null;
+  const yarn = els.woolYarn.value;
+  if (!od || !nap || !yarn) return null;
+  return woolRows.find(r =>
+    normU(r["Final OD"])===normU(od) &&
+    normU(r["Nap Length"])===normU(nap) &&
+    normU(r["Yarn"])===normU(yarn)
+  ) || null;
 }
 
 function stackCandidatesForBase(){
@@ -393,6 +416,27 @@ function stackCandidatesForBase(){
   const dia = norm(base["Op Tufted Pad Dia"]);
   if (!dia) return [];
   return stackRows.filter(r => norm(r["Poly Dia"]) === dia);
+}
+
+
+function resolveWoolStackFinal(){
+  const candidates = stackCandidatesForBase();
+  // apply backing / poly / mil filters same as recomputeWoolStack
+  let cand = candidates.slice();
+
+  if (els.woolBacking.value === "Loop") cand = cand.filter(r => isTruthy(r["Loop"]));
+  if (els.woolBacking.value === "Canvas") cand = cand.filter(r => isTruthy(r["Canvas"]));
+
+  if (els.woolPoly.value) cand = cand.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
+  if (els.woolMil.value) cand = cand.filter(r => normU(r["Poly Size MIL"]) === normU(els.woolMil.value));
+
+  return cand.length === 1 ? cand[0] : null;
+}
+
+function isWoolComplete(){
+  const base = resolveWoolBase();
+  const stack = resolveWoolStackFinal();
+  return !!(wb && base && stack && els.woolBacking.value && els.woolPoly.value && els.woolMil.value);
 }
 
 function recomputeWoolStack(){
@@ -469,12 +513,16 @@ function recomputeWoolStack(){
 
 function recomputeWoolAll(){
   recomputeWoolNap();
+  recomputeWoolYarn();
   recomputeWoolStack();
 }
 
 // Product type toggle
+let currentMode = "foam";
+
 function updateMode(){
   const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
+  currentMode = type;
   document.getElementById("foamCard").style.display = (type==="foam") ? "" : "none";
   document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
 }
@@ -662,7 +710,10 @@ function updateDebugAndButtons(){
   };
   showDebug(out);
 
-  const canDownload = wb && foamResolved && wheel && pad && (norm(els.reqName.value) || norm(els.sampleName.value));
+  const hasName = (norm(els.reqName.value) || norm(els.sampleName.value));
+  const foamComplete = !!(wb && foamResolved && wheel && pad);
+  const woolComplete = isWoolComplete();
+  const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
   els.btnDownload.disabled = !canDownload;
 }
 
@@ -709,7 +760,7 @@ function setInputsEnabled(on){
     els.reqName, els.sampleName,
     els.foamColor, els.foamThickness, els.foamWheel, els.foamPadSize,
     els.foamQty, els.foamLoopType, els.foamHole, els.foamNotes,
-    els.woolPadSize, els.woolNap, els.woolOrientation, els.woolBacking, els.woolPoly, els.woolMil, els.woolPrint, els.woolNotes
+    els.woolPadSize, els.woolNap, els.woolYarn, els.woolOrientation, els.woolBacking, els.woolPoly, els.woolMil, els.woolPrint, els.woolNotes
   ].forEach(el => { if (el) el.disabled = !on; });
   els.foamPartColor.disabled = !on;
 }
@@ -727,6 +778,49 @@ function buildFileName(){
 }
 
 function exportTestBOM(){
+  if (currentMode==="wool") {
+    const base = resolveWoolBase();
+    const stack = resolveWoolStackFinal();
+    if (!base) return alert("Select a valid tufted pad (Final OD + Nap + Yarn).");
+    if (!stack) return alert("Select Backing + Poly Type + MIL (must resolve to one stack row).");
+
+    const aoa = [
+      ["Requested By", norm(els.reqName.value)],
+      ["Sample Name", norm(els.sampleName.value)],
+      ["Generated", new Date().toLocaleString()],
+      [],
+      ["Field","Value"],
+      ["Product Type", "Tufted Wool"],
+      ["Final OD", norm(els.woolPadSize.value)],
+      ["Nap Length", norm(els.woolNap.value)],
+      ["Yarn", norm(els.woolYarn.value)],
+      ["Orientation", norm(els.woolOrientation.value)],
+      ["Backing Type", norm(els.woolBacking.value)],
+      ["Poly Type", norm(els.woolPoly.value)],
+      ["MIL (Sturdyness)", norm(els.woolMil.value)],
+      ["Print", norm(els.woolPrint.value)],
+      [],
+      ["Base Part Num", norm(base["Part Num"])],
+      ["OP Tufted Pad Dia", norm(base["Op Tufted Pad Dia"])],
+      ["Substrate Type", norm(base["Substrate Type"])],
+      ["Substrate Size", norm(base["Substrate Size"])],
+      ["Yarn (from row)", norm(base["Yarn"])],
+      [],
+      ["Stack Poly Dia", norm(stack["Poly Dia"])],
+      ["Stack Backing Size", norm(stack["Backing Size"])],
+      ["Stack Poly Type", norm(stack["Poly Type"])],
+      ["Stack Poly MIL", norm(stack["Poly Size MIL"])],
+      ["Notes", norm(els.woolNotes?.value)]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+    XLSX.writeFile(wbOut, buildFileName());
+    return;
+  }
+
   const foamResolved = resolveFoamRow();
   if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
 
@@ -785,8 +879,19 @@ els.btnReset.addEventListener("click", ()=>{
   els.foamLoopType.value="";
   els.foamHole.value="";
   els.foamNotes.value="";
+  // Reset wool
+  if (els.woolPadSize) els.woolPadSize.value="";
+  if (els.woolNap) els.woolNap.value="";
+  if (els.woolYarn) els.woolYarn.value="";
+  if (els.woolOrientation) els.woolOrientation.value="";
+  if (els.woolBacking) els.woolBacking.value="";
+  if (els.woolPoly) els.woolPoly.value="";
+  if (els.woolMil) els.woolMil.value="";
+  if (els.woolPrint) els.woolPrint.value="";
+  if (els.woolNotes) els.woolNotes.value="";
   els.foamPartColorRow.classList.add("hidden");
   recomputeFoam();
+  if (typeof recomputeWoolAll === "function") recomputeWoolAll();
 });
 
 els.btnDownload.addEventListener("click", exportTestBOM);
@@ -803,11 +908,13 @@ els.foamQty.addEventListener("input", updateDebugAndButtons);
 els.foamLoopType.addEventListener("change", updateDebugAndButtons);
 els.foamHole.addEventListener("change", updateDebugAndButtons);
 els.foamNotes.addEventListener("input", updateDebugAndButtons);
+if (els.woolNotes) els.woolNotes.addEventListener("input", updateDebugAndButtons);
 
 
 // Wool events
 if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolYarn) els.woolYarn.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolBacking) els.woolBacking.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolPoly) els.woolPoly.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolMil) els.woolMil.addEventListener("change", ()=>{ recomputeWoolAll(); });
@@ -815,7 +922,7 @@ if (els.woolOrientation) els.woolOrientation.addEventListener("change", ()=>{ up
 if (els.woolPrint) els.woolPrint.addEventListener("change", ()=>{ updateDebugAndButtons(); });
 
 // Product type radio events
-document.querySelectorAll('input[name="prodType"]').forEach(r => r.addEventListener("change", updateMode));
+document.querySelectorAll('input[name="prodType"]').forEach(r => r.addEventListener("change", ()=>{ updateMode(); updateDebugAndButtons(); }));
 
 (function init(){
   setStatus("Not loaded", null);
@@ -827,6 +934,7 @@ document.querySelectorAll('input[name="prodType"]').forEach(r => r.addEventListe
   els.foamPartColorRow.classList.add("hidden");
   if (els.woolPadSize) setSelectOptions(els.woolPadSize, [], "Load XLSX first", false);
   if (els.woolNap) setSelectOptions(els.woolNap, [], "Load XLSX first", false);
+  if (els.woolYarn) setSelectOptions(els.woolYarn, [], "Load XLSX first", false);
   if (els.woolBacking) setSelectOptions(els.woolBacking, [], "Load XLSX first", false);
   if (els.woolPoly) setSelectOptions(els.woolPoly, [], "Load XLSX first", false);
   if (els.woolMil) setSelectOptions(els.woolMil, [], "Load XLSX first", false);
