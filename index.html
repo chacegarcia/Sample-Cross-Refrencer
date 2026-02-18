@@ -423,14 +423,14 @@ function base64UrlEncode(str) {
 async function getAccessToken() {
   let account = msalInstance.getAllAccounts()[0];
   if (!account) {
-    await msalInstance.loginPopup(loginRequest);
+    await msalInstance.loginRedirect(loginRequest);
     account = msalInstance.getAllAccounts()[0];
   }
   try {
     const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
     return token.accessToken;
   } catch {
-    const token = await msalInstance.acquireTokenPopup({ ...loginRequest, account });
+    const token = await msalInstance.acquireTokenRedirect({ ...loginRequest, account });
     return token.accessToken;
   }
 }
