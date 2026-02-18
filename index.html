@@ -238,7 +238,7 @@
   <div class="card">
     <div class="inline">
       <button id="btnLoad" class="btn-primary">Load XLSX from OneDrive</button>
-      
+      <span id="status" class="pill">Not loaded</span>
       <button id="btnReset" class="btn-ghost" disabled>Reset</button>
     </div>
 
@@ -478,7 +478,6 @@ const els = {
   btnReset: $("btnReset"),
   btnDownload: $("btnDownload"),
   status: $("status"),
-  statusPill: $("statusPill"),
   debug: $("debug"),
 
   reqName: $("reqName"),
@@ -507,11 +506,11 @@ const els = {
 };
 
 function setStatus(text, ok=null){
+  if (!els.status) return;
   els.status.textContent = text;
-  if (!els.statusPill) return;
-  els.statusPill.classList.remove("ok","bad");
-  if (ok===true) els.statusPill.classList.add("ok");
-  if (ok===false) els.statusPill.classList.add("bad");
+  els.status.classList.remove("ok","bad");
+  if (ok===true) els.status.classList.add("ok");
+  if (ok===false) els.status.classList.add("bad");
 }
 function showDebug(obj){
   els.debug.textContent = (typeof obj === "string") ? obj : JSON.stringify(obj, null, 2);
