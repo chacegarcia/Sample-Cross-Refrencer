@@ -612,5 +612,48 @@ els.foamNotes.addEventListener("input", updateDebugAndButtons);
   setInputsEnabled(false);
 })();
 </script>
+
+<!-- Tufted Wool UI -->
+<div class="card">
+  <h3 style="margin:0 0 10px;">Tufted Wool Selection</h3>
+  <div class="grid">
+    <div class="row"><label>Final Pad Size</label><select id="woolPadSize"></select></div>
+    <div class="row"><label>Nap Length</label><select id="woolNap"></select></div>
+    <div class="row"><label>Orientation</label>
+      <select id="woolOrientation"><option value="">— Select —</option><option>Curved</option><option>Flat</option></select>
+    </div>
+    <div class="row"><label>Backing Type</label><select id="woolBacking"></select></div>
+    <div class="row"><label>Poly Type</label><select id="woolPoly"></select></div>
+    <div class="row"><label>Sturdyness (MIL)</label><select id="woolMil"></select></div>
+    <div class="row"><label>Print</label>
+      <select id="woolPrint"><option>No Print</option><option>LC Print</option><option>Customer Sample Print</option></select>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== WOOL ADDON =====
+let woolRows=[],stackRows=[];
+function woolInit(wb){
+ const s3=wb.Sheets[wb.SheetNames[2]];
+ const s4=wb.Sheets[wb.SheetNames[3]];
+ woolRows=XLSX.utils.sheet_to_json(s3,{defval:""});
+ stackRows=XLSX.utils.sheet_to_json(s4,{defval:""});
+ populateWool();
+}
+function uniq(arr){return [...new Set(arr.filter(Boolean))];}
+function populateWool(){
+ const sizeSel=document.getElementById("woolPadSize");
+ if(!sizeSel) return;
+ sizeSel.innerHTML='<option></option>'+uniq(woolRows.map(r=>r["Final OD"])).map(v=>`<option>${v}</option>`).join('');
+}
+document.addEventListener("change",e=>{
+ if(e.target.id==="woolPadSize"){
+  const naps=uniq(woolRows.filter(r=>r["Final OD"]==e.target.value).map(r=>r["Nap Length"]));
+  document.getElementById("woolNap").innerHTML='<option></option>'+naps.map(v=>`<option>${v}</option>`).join('');
+ }
+});
+</script>
+
 </body>
 </html>
