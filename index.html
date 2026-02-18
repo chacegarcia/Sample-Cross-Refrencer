@@ -402,6 +402,7 @@
   </div>
 
 <script>
+
 const SHARE_LINK =
   "https://lakecman-my.sharepoint.com/:x:/g/personal/chace_garcia_lakecountrymfg_com/IQCfb3FNd-XeTbcO0TIOiHySAZry8RhZAI3YWDblhGMUVGA";
 
@@ -413,6 +414,16 @@ const msalInstance = new msal.PublicClientApplication({
   },
   cache: { cacheLocation: "localStorage" }
 });
+
+msalInstance.handleRedirectPromise().then((response) => {
+  if (response) {
+    console.log("Login successful");
+  }
+}).catch(error => {
+  console.error(error);
+});
+
+  
 const loginRequest = { scopes: ["Files.Read"] };
 
 function base64UrlEncode(str) {
