@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LCM Sample Configurator (Foam Only)</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; padding: 16px; line-height: 1.35; }
+    h2 { margin: 0 0 10px; }
+    .muted { color:#555; font-size:13px; }
+    .card { border:1px solid #ddd; border-radius:12px; padding:14px; margin:12px 0; max-width: 980px; }
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 820px){ .grid{ grid-template-columns:1fr; } }
+    label { font-weight:650; display:block; margin-bottom:6px; }
+    input, select, button, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #bbb;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    button { cursor:pointer; }
+    button:disabled { opacity:.6; cursor:not-allowed; }
+    .row { margin: 10px 0; }
+    .inline { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .pill { display:inline-block; padding:4px 10px; border-radius:999px; border:1px solid #bbb; font-size:13px; }
+    pre { background:#f6f6f6; padding:12px; border-radius:10px; overflow:auto; }
+    .ok { color:#0a7b2a; border-color:#0a7b2a; }
+    .bad { color:#b00020; border-color:#b00020; }
+    .hidden { display:none !important; }
+  </style>
+</head>
+
+<body>
+  <h2>LCM Sample Configurator (Foam Only)</h2>
+  <div class="muted">
+    Run from a local server (VS Code Live Server / http://localhost:5500). The favicon 404 is normal.
+  </div>
+
+  <div class="card">
+    <div class="inline">
+      <button id="btnLoad">Load XLSX from OneDrive</button>
+      <span id="status" class="pill">Not loaded</span>
+      <button id="btnReset" disabled>Reset</button>
+    </div>
+
+    <div class="grid" style="margin-top:12px;">
+      <div class="row">
+        <label for="reqName">Requested By</label>
+        <input id="reqName" placeholder="e.g., Chace Garcia">
+      </div>
+      <div class="row">
+        <label for="sampleName">Sample Name</label>
+        <input id="sampleName" placeholder="e.g., Red 1.25 FR test">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin:0 0 10px;">Foam Selection</h3>
+
+    <div class="grid">
+      <div class="row">
+        <label for="foamColor">Color</label>
+        <select id="foamColor" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamThickness">Thickness</label>
+        <select id="foamThickness" disabled></select>
+      </div>
+
+      <div class="row hidden" id="foamPartColorRow">
+        <label for="foamPartColor">Part Color (name)</label>
+        <select id="foamPartColor"></select>
+      </div>
+
+      <div class="row">
+        <label for="foamWheel">Wheel</label>
+        <select id="foamWheel" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamPadSize">Pad Size</label>
+        <select id="foamPadSize" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamQty">Qty</label>
+        <input id="foamQty" type="number" min="1" step="1" value="1" disabled>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="row">
+        <label for="foamLoopType">Loop Type</label>
+        <select id="foamLoopType" disabled>
+          <option value="">— Select —</option>
+          <option>White Loop</option>
+          <option>Black Loop</option>
+          <option>No Loop</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="foamHole">Finished Pad</label>
+        <select id="foamHole" disabled>
+          <option value="">— Select —</option>
+          <option>With Hole</option>
+          <option>No Hole</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="foamNotes">Notes</label>
+      <textarea id="foamNotes" disabled placeholder="Optional notes..."></textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="inline">
+      <button id="btnDownload" disabled>Download Test BOM (.xlsx)</button>
+    </div>
+    <div class="muted" style="margin-top:8px;">
+      This is a simple test export (we'll refine rows/formatting after you confirm selections work).
+    </div>
+    <h4 style="margin:12px 0 8px;">Debug</h4>
+    <pre id="debug">—</pre>
+  </div>
+
+<script>
+const SHARE_LINK =
+  "https://lakecman-my.sharepoint.com/:x:/g/personal/chace_garcia_lakecountrymfg_com/IQCfb3FNd-XeTbcO0TIOiHySAZio3l7eTD9xSMjvpVCURbk?e=c0HfBg";
+
+const msalInstance = new msal.PublicClientApplication({
+  auth: {
+    clientId: "f09a19dd-0056-40c6-8af0-4a1bc6504f8b",
+    authority: "https://login.microsoftonline.com/05281171-4b56-433b-95a7-ae79c44929d3",
+    redirectUri: "http://localhost:5500/"
+  },
+  cache: { cacheLocation: "localStorage" }
+});
+const loginRequest = { scopes: ["Files.Read"] };
+
+function base64UrlEncode(str) {
+  return btoa(unescape(encodeURIComponent(str)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function getAccessToken() {
+  let account = msalInstance.getAllAccounts()[0];
+  if (!account) {
+    await msalInstance.loginPopup(loginRequest);
+    account = msalInstance.getAllAccounts()[0];
+  }
+  try {
+    const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
+    return token.accessToken;
+  } catch {
+    const token = await msalInstance.acquireTokenPopup({ ...loginRequest, account });
+    return token.accessToken;
+  }
+}
+
+async function loadWorkbookFromSharePoint() {
+  const token = await getAccessToken();
+  const encoded = base64UrlEncode(SHARE_LINK);
+  const url = `https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem/content?cb=${Date.now()}`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache, no-store, max-age=0",
+      Pragma: "no-cache"
+    }
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(()=> "");
+    throw new Error(`Graph download failed (${res.status}): ${t}`);
+  }
+  const buf = await res.arrayBuffer();
+  return XLSX.read(buf, { type: "array" });
+}
+
+const COL = {
+  foam_color: "Color",
+  foam_part: "Part",
+  foam_partColor: "Part Color",
+  foam_thickness: "Thickness",
+  foam_firmness: "Firmness",
+  geo_wheel: "Wheel",
+  geo_padSizes: "Pad Sizes",
+  geo_grindDia: "Grinded Loop Dia",
+};
+
+let wb=null;
+let foamRows=[];
+let geoRows=[];
+
+const $ = (id)=>document.getElementById(id);
+const els = {
+  btnLoad: $("btnLoad"),
+  btnReset: $("btnReset"),
+  btnDownload: $("btnDownload"),
+  status: $("status"),
+  debug: $("debug"),
+
+  reqName: $("reqName"),
+  sampleName: $("sampleName"),
+
+  foamColor: $("foamColor"),
+  foamThickness: $("foamThickness"),
+  foamPartColorRow: $("foamPartColorRow"),
+  foamPartColor: $("foamPartColor"),
+  foamWheel: $("foamWheel"),
+  foamPadSize: $("foamPadSize"),
+  foamQty: $("foamQty"),
+  foamLoopType: $("foamLoopType"),
+  foamHole: $("foamHole"),
+  foamNotes: $("foamNotes"),
+};
+
+function setStatus(text, ok=null){
+  els.status.textContent = text;
+  els.status.classList.remove("ok","bad");
+  if (ok===true) els.status.classList.add("ok");
+  if (ok===false) els.status.classList.add("bad");
+}
+function showDebug(obj){
+  els.debug.textContent = (typeof obj === "string") ? obj : JSON.stringify(obj, null, 2);
+}
+function norm(v){ return String(v ?? "").replace(/\u00A0/g," ").trim(); }
+function normU(v){ return norm(v).toUpperCase(); }
+function toNum(v){
+  const n = parseFloat(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : null;
+}
+function isTruthy(v){
+  const s = normU(v);
+  return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
+}
+
+function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
+  const prev = keepValue ? sel.value : "";
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = options.length ? placeholder : "— No options —";
+  sel.appendChild(ph);
+
+  for(const opt of options){
+    const o=document.createElement("option");
+    o.value=opt;
+    o.textContent=opt;
+    sel.appendChild(o);
+  }
+
+  if (keepValue && prev && options.some(o=>normU(o)===normU(prev))){
+    sel.value = options.find(o=>normU(o)===normU(prev));
+  } else {
+    sel.value = "";
+  }
+  sel.disabled = options.length === 0;
+}
+
+function uniqSorted(rows, colName){
+  const set = new Set();
+  for (const r of rows){
+    const v = norm(r[colName]);
+    if (v) set.add(v);
+  }
+  return Array.from(set).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function splitMaybeComma(v){
+  const s = norm(v);
+  if (!s) return [];
+  return s.split(",").map(x=>x.trim()).filter(Boolean);
+}
+
+function hnorm(s){
+  return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
+}
+function sheetToJsonByHeaders(ws, requiredHeaders){
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  const req = requiredHeaders.map(hnorm);
+
+  let headerRowIdx = -1;
+  let headers = null;
+
+  for (let i=0; i<Math.min(50, aoa.length); i++){
+    const row = (aoa[i]||[]).map(hnorm).filter(Boolean);
+    if (!row.length) continue;
+    const ok = req.every(rh => row.includes(rh));
+    if (ok){
+      headerRowIdx = i;
+      headers = (aoa[i]||[]).map(v => String(v ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim());
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1 || !headers){
+    return XLSX.utils.sheet_to_json(ws, { defval: "" });
+  }
+
+  const out=[];
+  for (let r=headerRowIdx+1; r<aoa.length; r++){
+    const row = aoa[r]||[];
+    const obj={};
+    for (let c=0; c<headers.length; c++){
+      const k=headers[c];
+      if (!k) continue;
+      obj[k]=row[c] ?? "";
+    }
+    if (Object.values(obj).some(v=>norm(v))) out.push(obj);
+  }
+  return out;
+}
+
+let THK_COLS = [];
+let THK_MAP = new Map();
+
+function buildThkMaps(){
+  THK_COLS = [];
+  THK_MAP = new Map();
+  if (!geoRows.length) return;
+
+  for (const k of Object.keys(geoRows[0])){
+    if (hnorm(k).startsWith("THK_")){
+      const col = k.trim();
+      THK_COLS.push(col);
+      const suffix = col.trim().slice(4);
+      const n = parseFloat(suffix);
+      if (Number.isFinite(n)) THK_MAP.set(n, col);
+    }
+  }
+  THK_COLS.sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function thkBucketCol(thkVal){
+  const t = toNum(thkVal);
+  if (t === null) return null;
+  if (t < 0.875) return THK_MAP.get(0.875) || "THK_0.875";
+  if (THK_MAP.has(t)) return THK_MAP.get(t);
+  for (const [n,col] of THK_MAP.entries()){
+    if (Math.abs(n - t) < 1e-9) return col;
+  }
+  return null;
+}
+
+function wheelsForThickness(thkVal){
+  const col = thkBucketCol(thkVal);
+  if (!col) return [];
+  const wheels = new Set();
+  for (const r of geoRows){
+    if (isTruthy(r[col])){
+      const w = norm(r[COL.geo_wheel]);
+      if (w) wheels.add(w);
+    }
+  }
+  return Array.from(wheels).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function foamRowsByColor(color){
+  const c = normU(color);
+  return foamRows.filter(r => normU(r[COL.foam_color]) === c);
+}
+function foamRowsByColorThickness(color, thickness){
+  const c = normU(color);
+  const t = toNum(thickness);
+  if (!c || t === null) return [];
+  return foamRows.filter(r => {
+    if (normU(r[COL.foam_color]) !== c) return false;
+    const rt = toNum(r[COL.foam_thickness]);
+    return rt !== null && Math.abs(rt - t) < 1e-9;
+  });
+}
+function geoRowsByWheel(wheel){
+  const w = normU(wheel);
+  return geoRows.filter(r => normU(r[COL.geo_wheel]) === w);
+}
+
+function resolveFoamRow(){
+  const color = els.foamColor.value;
+  const thk = els.foamThickness.value;
+  if (!color || !thk) return null;
+
+  const matches = foamRowsByColorThickness(color, thk);
+  if (matches.length === 1) return matches[0];
+
+  const pc = els.foamPartColor.value;
+  if (!pc) return null;
+
+  return matches.find(r => normU(r[COL.foam_partColor]) === normU(pc)) || null;
+}
+
+function recomputeFoam(){
+  const color = els.foamColor.value;
+
+  const thicknessOpts = color ? uniqSorted(foamRowsByColor(color), COL.foam_thickness) : [];
+  setSelectOptions(els.foamThickness, thicknessOpts, "— Select Thickness —", true);
+
+  const thk = els.foamThickness.value;
+  const matches = (color && thk) ? foamRowsByColorThickness(color, thk) : [];
+
+  if (matches.length > 1){
+    els.foamPartColorRow.classList.remove("hidden");
+    const pcs = Array.from(new Set(matches.map(r => norm(r[COL.foam_partColor])).filter(Boolean)))
+      .sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+    setSelectOptions(els.foamPartColor, pcs, "— Select Part Color —", true);
+  } else {
+    els.foamPartColorRow.classList.add("hidden");
+    els.foamPartColor.innerHTML = '<option value="">—</option>';
+    els.foamPartColor.value = "";
+  }
+
+  const wheelOpts = thk ? wheelsForThickness(thk) : uniqSorted(geoRows, COL.geo_wheel);
+  const prevWheel = els.foamWheel.value;
+  setSelectOptions(els.foamWheel, wheelOpts, "— Select Wheel —", true);
+  if (prevWheel && !wheelOpts.some(w => normU(w) === normU(prevWheel))){
+    els.foamWheel.value = "";
+  }
+
+  const padOpts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
+  const padUnique = Array.from(new Set(padOpts)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+  setSelectOptions(els.foamPadSize, padUnique, "— Select Pad Size —", true);
+
+  updateDebugAndButtons();
+}
+
+function updateDebugAndButtons(){
+  const foamResolved = resolveFoamRow();
+  const wheel = els.foamWheel.value;
+  const pad = els.foamPadSize.value;
+
+  let grindDia = null;
+  if (wheel && pad){
+    const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
+    grindDia = row ? norm(row[COL.geo_grindDia]) : null;
+  }
+
+  const out = {
+    sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length },
+    selections: {
+      color: els.foamColor.value,
+      thickness: els.foamThickness.value,
+      partColor: els.foamPartColor.value || null,
+      wheel: wheel || null,
+      padSize: pad || null,
+      qty: els.foamQty.value,
+      loopType: els.foamLoopType.value || null,
+      finishedPad: els.foamHole.value || null
+    },
+    resolvedFoam: foamResolved ? {
+      part: norm(foamResolved[COL.foam_part]),
+      partColor: norm(foamResolved[COL.foam_partColor]),
+      firmness: norm(foamResolved[COL.foam_firmness])
+    } : null,
+    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null
+  };
+  showDebug(out);
+
+  const canDownload = wb && foamResolved && wheel && pad && (norm(els.reqName.value) || norm(els.sampleName.value));
+  els.btnDownload.disabled = !canDownload;
+}
+
+async function loadAll(){
+  setStatus("Loading workbook…", null);
+
+  wb = null; foamRows = []; geoRows = [];
+  THK_COLS = []; THK_MAP = new Map();
+
+  setInputsEnabled(false);
+
+  wb = await loadWorkbookFromSharePoint();
+  const s1 = wb.Sheets[wb.SheetNames[0]];
+  const s2 = wb.Sheets[wb.SheetNames[1]];
+
+  foamRows = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
+  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
+  buildThkMaps();
+
+  setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
+  setSelectOptions(els.foamThickness, [], "— Select Thickness —", false);
+  setSelectOptions(els.foamWheel, uniqSorted(geoRows, COL.geo_wheel), "— Select Wheel —", false);
+  setSelectOptions(els.foamPadSize, [], "— Select Pad Size —", false);
+
+  els.foamPartColorRow.classList.add("hidden");
+  els.foamPartColor.innerHTML = '<option value="">—</option>';
+
+  setInputsEnabled(true);
+  els.btnReset.disabled = false;
+
+  setStatus(`Loaded. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
+  recomputeFoam();
+}
+
+function setInputsEnabled(on){
+  [
+    els.reqName, els.sampleName,
+    els.foamColor, els.foamThickness, els.foamWheel, els.foamPadSize,
+    els.foamQty, els.foamLoopType, els.foamHole, els.foamNotes
+  ].forEach(el => el.disabled = !on);
+  els.foamPartColor.disabled = !on;
+}
+
+function safeFileName(str){
+  return String(str||"").replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim();
+}
+function buildFileName(){
+  const r = safeFileName(els.reqName.value);
+  const s = safeFileName(els.sampleName.value);
+  if (!r && !s) return "Sample.xlsx";
+  if (!r) return `${s}.xlsx`;
+  if (!s) return `${r}.xlsx`;
+  return `${r} - ${s}.xlsx`;
+}
+
+function exportTestBOM(){
+  const foamResolved = resolveFoamRow();
+  if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
+
+  const wheel = els.foamWheel.value;
+  const pad = els.foamPadSize.value;
+  if (!wheel || !pad) return alert("Select Wheel + Pad Size.");
+
+  const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
+
+  let grindDia = "";
+  const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
+  if (row) grindDia = norm(row[COL.geo_grindDia]);
+
+  const aoa = [
+    ["Requested By", norm(els.reqName.value)],
+    ["Sample Name", norm(els.sampleName.value)],
+    ["Generated", new Date().toLocaleString()],
+    [],
+    ["Field","Value"],
+    ["Foam Part", norm(foamResolved[COL.foam_part])],
+    ["Foam Part Color", norm(foamResolved[COL.foam_partColor])],
+    ["Foam Color", norm(els.foamColor.value)],
+    ["Foam Thickness", norm(els.foamThickness.value)],
+    ["Foam Firmness", norm(foamResolved[COL.foam_firmness])],
+    ["Wheel", wheel],
+    ["Pad Size", pad],
+    ["Grinded Loop Dia", grindDia],
+    ["Qty", qty],
+    ["Loop Type", norm(els.foamLoopType.value)],
+    ["Finished Pad", norm(els.foamHole.value)],
+    ["Notes", norm(els.foamNotes.value)],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+
+  const wbOut = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+  XLSX.writeFile(wbOut, buildFileName());
+}
+
+els.btnLoad.addEventListener("click", async ()=>{
+  try { await loadAll(); }
+  catch (e){ setStatus(String(e), false); showDebug(String(e)); setInputsEnabled(false); }
+});
+
+els.btnReset.addEventListener("click", ()=>{
+  els.reqName.value="";
+  els.sampleName.value="";
+  els.foamColor.value="";
+  els.foamThickness.value="";
+  els.foamPartColor.value="";
+  els.foamWheel.value="";
+  els.foamPadSize.value="";
+  els.foamQty.value="1";
+  els.foamLoopType.value="";
+  els.foamHole.value="";
+  els.foamNotes.value="";
+  els.foamPartColorRow.classList.add("hidden");
+  recomputeFoam();
+});
+
+els.btnDownload.addEventListener("click", exportTestBOM);
+
+els.reqName.addEventListener("input", updateDebugAndButtons);
+els.sampleName.addEventListener("input", updateDebugAndButtons);
+
+els.foamColor.addEventListener("change", recomputeFoam);
+els.foamThickness.addEventListener("change", recomputeFoam);
+els.foamPartColor.addEventListener("change", recomputeFoam);
+els.foamWheel.addEventListener("change", recomputeFoam);
+els.foamPadSize.addEventListener("change", recomputeFoam);
+els.foamQty.addEventListener("input", updateDebugAndButtons);
+els.foamLoopType.addEventListener("change", updateDebugAndButtons);
+els.foamHole.addEventListener("change", updateDebugAndButtons);
+els.foamNotes.addEventListener("input", updateDebugAndButtons);
+
+(function init(){
+  setStatus("Not loaded", null);
+  showDebug("—");
+  setSelectOptions(els.foamColor, [], "Load XLSX first", false);
+  setSelectOptions(els.foamThickness, [], "Load XLSX first", false);
+  setSelectOptions(els.foamWheel, [], "Load XLSX first", false);
+  setSelectOptions(els.foamPadSize, [], "Load XLSX first", false);
+  els.foamPartColorRow.classList.add("hidden");
+  setInputsEnabled(false);
+})();
+</script>
+</body>
+</html>
