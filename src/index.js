@@ -41,6 +41,11 @@ export default {
     if (payload.tid !== env.ALLOWED_TENANT) {
       return new Response("Wrong tenant", { status: 403, headers: cors });
     }
+    
+    const email = String(payload.preferred_username || payload.upn || payload.email || "").toLowerCase();
+    if (email !== "chace_garcia@lakecountrymfg.com") {
+      return new Response("Not allowed", { status: 403, headers: cors });
+    }
 
     // -----------------------------
     // 3) Read incoming DB JSON
