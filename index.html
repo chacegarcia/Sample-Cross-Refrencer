@@ -432,9 +432,37 @@ const msalInstance = new msal.PublicClientApplication({
 });
 
 let lastIdToken = null;
-msalInstance.handleRedirectPromise().then((res) => {
-  if (res?.idToken) lastIdToken = res.idToken;
-}).catch(console.error);
+
+(async () => {
+  try {
+    const res = await msalInstance.handleRedirectPromise();
+
+    // Case 1: just logged in (redirect)
+    if (res?.idToken) {
+      lastIdToken = res.idToken;
+      msalInstance.setActiveAccount(res.account);
+      return;
+    }
+
+    // Case 2: already logged in (page refresh)
+    const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+    if (!account) return;
+
+    msalInstance.setActiveAccount(account);
+
+    // silently grab ID token again
+    const token = await msalInstance.acquireTokenSilent({
+      scopes: ["openid", "profile", "email"],
+      account
+    });
+
+    lastIdToken = token.idToken;
+
+  } catch (err) {
+    console.error("MSAL init failed:", err);
+  }
+})();
+
 
 const loginRequest = {
   scopes: ["openid", "profile", "email", "Files.Read"]
@@ -524,14 +552,13 @@ async function loadDbFromGitHub() {
  * PUSH JSON (optional)
  ***********************/
 async function pushDbUpdate(dbObject) {
-
-  if (!idToken) throw new Error("Not signed in");
+  if (!lastIdToken) throw new Error("Not signed in (no id token).");
 
   const res = await fetch(WORKER_PUSH_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${idToken}`
+      "Authorization": `Bearer ${lastIdToken}`
     },
     body: JSON.stringify(dbObject)
   });
@@ -539,6 +566,7 @@ async function pushDbUpdate(dbObject) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
 
 
 /***********************
