@@ -1,24 +1,40 @@
 export default {
   async fetch(request, env) {
+
     const cors = {
       "Access-Control-Allow-Origin": "https://chacegarcia.github.io",
-      "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
-      "Access-Control-Allow-Headers": "Content-Type"
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
     };
 
-    if (request.method === "OPTIONS") {
+    if (request.method === "OPTIONS")
       return new Response(null, { headers: cors });
+
+    if (request.method === "POST") {
+
+      const auth = request.headers.get("Authorization") || "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+      if (!token)
+        return new Response("Missing Microsoft token", { status: 401, headers: cors });
+
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+
+        if (payload.tid !== env.ALLOWED_TENANT)
+          return new Response("Wrong tenant", { status: 401, headers: cors });
+
+      } catch {
+        return new Response("Invalid token", { status: 401, headers: cors });
+      }
+
+      // continue to GitHub commit logic here
+      return await handleGitHubUpdate(request, env, cors);
     }
 
-    if (request.method === "GET") {
-      return new Response("db-updater is deployed ✅", {
-        headers: { ...cors, "content-type": "text/plain; charset=utf-8" }
-      });
-    }
+    return new Response("db-updater running");
+  }
+};
 
-    if (request.method !== "POST") {
-      return new Response("Use POST", { status: 405, headers: cors });
-    }
 
     // ---- Parse incoming JSON ----
     let body;
