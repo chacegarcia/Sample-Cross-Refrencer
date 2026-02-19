@@ -402,10 +402,27 @@
   </div>
 
 <script>
-
+/***********************
+ * CONFIG
+ ***********************/
 const SHARE_LINK =
   "https://lakecman-my.sharepoint.com/:x:/g/personal/chace_garcia_lakecountrymfg_com/IQCfb3FNd-XeTbcO0TIOiHySAZry8RhZAI3YWDblhGMUVGA";
 
+// If you want Excel auto-login ONLY for you, open:
+// https://chacegarcia.github.io/Sample-Cross-Refrencer/?admin=1
+function isAdminMode() {
+  return new URLSearchParams(location.search).get("admin") === "1";
+}
+
+// Your GitHub JSON fallback (make sure this file exists in your repo)
+const FALLBACK_JSON_PATH = "./db/data.json";
+
+// Your Cloudflare Worker endpoint (only used if you enable push below)
+const WORKER_PUSH_URL = "https://db-updater.chacegarcia.workers.dev/";
+
+/***********************
+ * MSAL / AUTH (Excel path)
+ ***********************/
 const msalInstance = new msal.PublicClientApplication({
   auth: {
     clientId: "f09a19dd-0056-40c6-8af0-4a1bc6504f8b",
@@ -415,38 +432,56 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
+// Keep scopes minimal for your SharePoint/OneDrive download.
+// (If you find this returns 403/insufficient, you may need Files.Read.All depending on tenant policy/consent.)
 const loginRequest = { scopes: ["Files.Read"] };
 
-msalInstance.handleRedirectPromise().then((response) => {
-  if (response) {
-    console.log("Login successful");
-  }
-}).catch(error => {
-  console.error(error);
-});
-  
 function base64UrlEncode(str) {
   return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
 }
 
-async function getAccessToken() {
-  let account = msalInstance.getAllAccounts()[0];
-  if (!account) {
-    await msalInstance.loginRedirect(loginRequest);
-    account = msalInstance.getAllAccounts()[0];
-  }
+/**
+ * IMPORTANT:
+ * - No auto-redirect for normal users.
+ * - Silent-only token attempt: if it fails, we fall back to JSON.
+ */
+async function getAccessTokenSilentOnly() {
+  const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
+  if (!account) return null;
+
+  msalInstance.setActiveAccount(account);
+
   try {
     const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
     return token.accessToken;
   } catch {
-    const token = await msalInstance.acquireTokenRedirect({ ...loginRequest, account });
-    return token.accessToken;
+    // No redirect here — just fail so we can fall back to JSON.
+    return null;
   }
 }
 
-async function loadWorkbookFromSharePoint() {
-  const token = await getAccessToken();
+/**
+ * Admin-only helper: if you open with ?admin=1 and you're not signed in,
+ * we trigger loginRedirect for YOU.
+ */
+function ensureLoginIfAdmin() {
+  if (!isAdminMode()) return;
+  const account = msalInstance.getAllAccounts()[0];
+  if (!account) {
+    msalInstance.loginRedirect(loginRequest);
+  }
+}
+
+/***********************
+ * LOAD EXCEL (attempt)
+ ***********************/
+async function loadWorkbookFromSharePointAttempt() {
+  const token = await getAccessTokenSilentOnly();
+  if (!token) throw new Error("No token available (silent).");
+
   const encoded = base64UrlEncode(SHARE_LINK);
   const url = `https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem/content?cb=${Date.now()}`;
 
@@ -458,13 +493,106 @@ async function loadWorkbookFromSharePoint() {
       Pragma: "no-cache"
     }
   });
+
   if (!res.ok) {
-    const t = await res.text().catch(()=> "");
+    const t = await res.text().catch(() => "");
     throw new Error(`Graph download failed (${res.status}): ${t}`);
   }
+
   const buf = await res.arrayBuffer();
   return XLSX.read(buf, { type: "array" });
 }
+
+/***********************
+ * LOAD JSON FALLBACK
+ ***********************/
+async function loadDbFromGitHub() {
+  const res = await fetch(`${FALLBACK_JSON_PATH}?cb=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load ${FALLBACK_JSON_PATH} (${res.status})`);
+  return res.json();
+}
+
+/***********************
+ * PUSH JSON (optional)
+ * - This lets you (admin) refresh GitHub JSON whenever Excel loads successfully.
+ ***********************/
+async function pushDbUpdate(dbObject) {
+  const res = await fetch(WORKER_PUSH_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dbObject)
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`Push failed (${res.status}): ${t}`);
+  }
+  return res.json();
+}
+
+/***********************
+ * SMART LOADER:
+ * - Try Excel (only if silent auth works)
+ * - If it fails for anyone, fallback to JSON
+ * - Optionally: if you're in admin mode and Excel worked, push JSON update
+ ***********************/
+async function loadDbSmart() {
+  // 1) Try Excel
+  try {
+    const wb = await loadWorkbookFromSharePointAttempt();
+
+    // You must already have this function somewhere in your code:
+    // Convert workbook -> your DB shape (ex: { rows: [...] })
+    const dbObject = workbookToDb(wb);
+
+    // OPTIONAL: if you want Excel to keep JSON fresh for everyone,
+    // uncomment this line. (Recommended ONLY for admin mode.)
+    // if (isAdminMode()) await pushDbUpdate(dbObject);
+
+    return { source: "excel", db: dbObject };
+  } catch (e) {
+    console.warn("Excel load failed; falling back to JSON.", e);
+  }
+
+  // 2) Fallback JSON
+  const db = await loadDbFromGitHub();
+  return { source: "json", db };
+}
+
+/***********************
+ * BOOTSTRAP
+ * - handleRedirectPromise MUST run early
+ * - then admin auto-login (optional)
+ * - then load DB
+ ***********************/
+(async () => {
+  try {
+    // Process MSAL redirect result (if any)
+    await msalInstance.handleRedirectPromise();
+
+    // If you open with ?admin=1, it will sign you in (only you)
+    ensureLoginIfAdmin();
+
+    // Load DB (Excel if possible, otherwise JSON)
+    const { source, db } = await loadDbSmart();
+    console.log("DB source:", source);
+
+    // You must already have a render() function somewhere in your code:
+    render(db);
+  } catch (err) {
+    console.error(err);
+
+    // Last-resort fallback: try JSON even if something else blew up
+    try {
+      const db = await loadDbFromGitHub();
+      render(db);
+    } catch (e2) {
+      console.error("Fallback JSON also failed:", e2);
+      // Optional: show UI error state here
+      // setStatus?.("Failed to load data source.");
+    }
+  }
+})();
 
 const COL = {
   foam_color: "Color",
