@@ -1129,7 +1129,10 @@ async function loadAll(){
     const db = workbookToDb(wbExcel);
 
     // OPTIONAL: keep JSON fresh for everyone when YOU load Excel
-    if (isAdminMode()) await pushDbUpdate(db);
+    if (isAdminMode() && (getCachedAccount()?.username || "").toLowerCase() === "chace_garcia@lakecountrymfg.com") {
+  await pushDbUpdate(db);
+  }
+
 
     applyDbToApp(db);
     setStatus(`Loaded from EXCEL. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
