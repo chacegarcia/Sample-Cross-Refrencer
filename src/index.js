@@ -43,7 +43,7 @@ export default {
     }
     
     const email = String(payload.preferred_username || payload.upn || payload.email || "").toLowerCase();
-    if (email !== "chace_garcia@lakecountrymfg.com") {
+    if (email !== "chace.garcia@lakecountrymfg.com") {
       return new Response("Not allowed", { status: 403, headers: cors });
     }
 
