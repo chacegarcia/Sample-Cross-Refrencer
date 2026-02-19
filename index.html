@@ -408,16 +408,13 @@
 const SHARE_LINK =
   "https://lakecman-my.sharepoint.com/:x:/g/personal/chace_garcia_lakecountrymfg_com/IQCfb3FNd-XeTbcO0TIOiHySAZry8RhZAI3YWDblhGMUVGA";
 
-// If you want Excel auto-login ONLY for you, open:
+// Open with ?admin=1 if you want it to redirect-sign-in for you:
 // https://chacegarcia.github.io/Sample-Cross-Refrencer/?admin=1
 function isAdminMode() {
   return new URLSearchParams(location.search).get("admin") === "1";
 }
 
-// Your GitHub JSON fallback (make sure this file exists in your repo)
 const FALLBACK_JSON_PATH = "./db/data.json";
-
-// Your Cloudflare Worker endpoint (only used if you enable push below)
 const WORKER_PUSH_URL = "https://db-updater.chacegarcia.workers.dev/";
 
 /***********************
@@ -432,21 +429,20 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
-// Keep scopes minimal for your SharePoint/OneDrive download.
-// (If you find this returns 403/insufficient, you may need Files.Read.All depending on tenant policy/consent.)
 const loginRequest = { scopes: ["Files.Read"] };
 
+// Modern base64url encoding (no deprecated unescape)
 function base64UrlEncode(str) {
-  return btoa(unescape(encodeURIComponent(str)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/g, "");
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
 /**
- * IMPORTANT:
- * - No auto-redirect for normal users.
- * - Silent-only token attempt: if it fails, we fall back to JSON.
+ * Silent-only token attempt:
+ * - If user isn't already signed in / can't get token silently -> return null (so we fallback to JSON)
+ * - IMPORTANT: no redirects for normal users
  */
 async function getAccessTokenSilentOnly() {
   const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
@@ -458,14 +454,12 @@ async function getAccessTokenSilentOnly() {
     const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
     return token.accessToken;
   } catch {
-    // No redirect here — just fail so we can fall back to JSON.
     return null;
   }
 }
 
 /**
- * Admin-only helper: if you open with ?admin=1 and you're not signed in,
- * we trigger loginRedirect for YOU.
+ * Admin-only: if you open with ?admin=1 and you're not signed in, redirect for login.
  */
 function ensureLoginIfAdmin() {
   if (!isAdminMode()) return;
@@ -474,6 +468,11 @@ function ensureLoginIfAdmin() {
     msalInstance.loginRedirect(loginRequest);
   }
 }
+
+// Process redirect results once; then optionally force admin login
+msalInstance.handleRedirectPromise()
+  .then(() => ensureLoginIfAdmin())
+  .catch(console.error);
 
 /***********************
  * LOAD EXCEL (attempt)
@@ -514,7 +513,6 @@ async function loadDbFromGitHub() {
 
 /***********************
  * PUSH JSON (optional)
- * - This lets you (admin) refresh GitHub JSON whenever Excel loads successfully.
  ***********************/
 async function pushDbUpdate(dbObject) {
   const res = await fetch(WORKER_PUSH_URL, {
@@ -531,69 +529,8 @@ async function pushDbUpdate(dbObject) {
 }
 
 /***********************
- * SMART LOADER:
- * - Try Excel (only if silent auth works)
- * - If it fails for anyone, fallback to JSON
- * - Optionally: if you're in admin mode and Excel worked, push JSON update
+ * YOUR APP LOGIC (unchanged below, except loadAll uses smart loader)
  ***********************/
-async function loadDbSmart() {
-  // 1) Try Excel
-  try {
-    const wb = await loadWorkbookFromSharePointAttempt();
-
-    // You must already have this function somewhere in your code:
-    // Convert workbook -> your DB shape (ex: { rows: [...] })
-    const dbObject = workbookToDb(wb);
-
-    // OPTIONAL: if you want Excel to keep JSON fresh for everyone,
-    // uncomment this line. (Recommended ONLY for admin mode.)
-    // if (isAdminMode()) await pushDbUpdate(dbObject);
-
-    return { source: "excel", db: dbObject };
-  } catch (e) {
-    console.warn("Excel load failed; falling back to JSON.", e);
-  }
-
-  // 2) Fallback JSON
-  const db = await loadDbFromGitHub();
-  return { source: "json", db };
-}
-
-/***********************
- * BOOTSTRAP
- * - handleRedirectPromise MUST run early
- * - then admin auto-login (optional)
- * - then load DB
- ***********************/
-(async () => {
-  try {
-    // Process MSAL redirect result (if any)
-    await msalInstance.handleRedirectPromise();
-
-    // If you open with ?admin=1, it will sign you in (only you)
-    ensureLoginIfAdmin();
-
-    // Load DB (Excel if possible, otherwise JSON)
-    const { source, db } = await loadDbSmart();
-    console.log("DB source:", source);
-
-    // You must already have a render() function somewhere in your code:
-    render(db);
-  } catch (err) {
-    console.error(err);
-
-    // Last-resort fallback: try JSON even if something else blew up
-    try {
-      const db = await loadDbFromGitHub();
-      render(db);
-    } catch (e2) {
-      console.error("Fallback JSON also failed:", e2);
-      // Optional: show UI error state here
-      // setStatus?.("Failed to load data source.");
-    }
-  }
-})();
-
 const COL = {
   foam_color: "Color",
   foam_part: "Part",
@@ -721,7 +658,6 @@ function recomputeWoolNap(){
   setSelectOptions(els.woolNap, naps, "— Select Nap —", true);
 }
 
-
 function recomputeWoolYarn(){
   const od = els.woolPadSize.value;
   const nap = els.woolNap.value;
@@ -732,7 +668,6 @@ function recomputeWoolYarn(){
   const yarns = uniqSorted(rows, "Yarn");
   setSelectOptions(els.woolYarn, yarns, "— Select Yarn —", true);
 }
-
 
 function resolveWoolDia(){
   const od = els.woolPadSize.value;
@@ -745,7 +680,6 @@ function resolveWoolDia(){
   if (!rows.length) return null;
   const dias = Array.from(new Set(rows.map(r => norm(r["Op Tufted Pad Dia"])).filter(Boolean)));
   if (dias.length === 1) return dias[0];
-  // If multiple dias exist for same OD+Nap, require Yarn to disambiguate
   const yarn = els.woolYarn.value;
   if (yarn){
     const r = rows.find(x => normU(x["Yarn"])===normU(yarn));
@@ -772,10 +706,8 @@ function stackCandidatesForBase(){
   return stackRows.filter(r => norm(r["Poly Dia"]) === dia);
 }
 
-
 function resolveWoolStackFinal(){
   const candidates = stackCandidatesForBase();
-  // apply backing / poly / mil filters same as recomputeWoolStack
   let cand = candidates.slice();
 
   if (els.woolBacking.value === "Loop") cand = cand.filter(r => isTruthy(r["Loop"]));
@@ -797,34 +729,27 @@ function recomputeWoolStack(){
   const base = resolveWoolBase();
   const candidates = stackCandidatesForBase();
 
-  // Backing Type from Loop/Canvas flags (Y)
   const backs = [];
   if (candidates.some(r => isTruthy(r["Loop"]))) backs.push("Loop");
   if (candidates.some(r => isTruthy(r["Canvas"]))) backs.push("Canvas");
   setSelectOptions(els.woolBacking, backs, "— Select Backing —", true);
 
-  // Apply backing filter to candidates
   let cand2 = candidates.slice();
   if (els.woolBacking.value === "Loop") cand2 = cand2.filter(r => isTruthy(r["Loop"]));
   if (els.woolBacking.value === "Canvas") cand2 = cand2.filter(r => isTruthy(r["Canvas"]));
 
-  // Poly Type
   const polys = uniqSorted(cand2, "Poly Type");
   setSelectOptions(els.woolPoly, polys, "— Select Poly —", true);
 
-  // Apply poly filter
   let cand3 = cand2.slice();
   if (els.woolPoly.value) cand3 = cand3.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
 
-  // MIL
   const mils = uniqSorted(cand3, "Poly Size MIL");
   setSelectOptions(els.woolMil, mils, "— Select MIL —", true);
 
-  // If MIL picked, final candidates (can be used later for BOM)
   let cand4 = cand3.slice();
   if (els.woolMil.value) cand4 = cand4.filter(r => normU(r["Poly Size MIL"]) === normU(els.woolMil.value));
 
-  // Update debug with wool resolution as well (non-breaking)
   const baseOut = base ? {
     partNum: norm(base["Part Num"]),
     finalOD: norm(base["Final OD"]),
@@ -837,7 +762,6 @@ function recomputeWoolStack(){
 
   const stackOut = (cand4.length === 1) ? cand4[0] : null;
 
-  // Attach to existing debug object if possible
   try {
     const current = JSON.parse(els.debug.textContent || "{}");
     current.wool = {
@@ -860,9 +784,7 @@ function recomputeWoolStack(){
       } : null
     };
     showDebug(current);
-  } catch {
-    // ignore if debug isn't JSON
-  }
+  } catch {}
 }
 
 function recomputeWoolAll(){
@@ -873,14 +795,12 @@ function recomputeWoolAll(){
 
 // Product type toggle
 let currentMode = "foam";
-
 function updateMode(){
   const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
   currentMode = type;
   document.getElementById("foamCard").style.display = (type==="foam") ? "" : "none";
   document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
 }
-
 
 function hnorm(s){
   return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
@@ -1071,27 +991,41 @@ function updateDebugAndButtons(){
   els.btnDownload.disabled = !canDownload;
 }
 
-async function loadAll(){
-  setStatus("Loading workbook…", null);
+/***********************
+ * SMART DATA LOADER FOR YOUR APP
+ * - Tries Excel silently; if it fails (COOP/CORS/permission), uses db/data.json
+ ***********************/
+function workbookToDb(wbIn){
+  const s1 = wbIn.Sheets[wbIn.SheetNames[0]];
+  const s2 = wbIn.Sheets[wbIn.SheetNames[1]];
+  const s3 = wbIn.Sheets[wbIn.SheetNames[2]];
+  const s4 = wbIn.Sheets[wbIn.SheetNames[3]];
 
-  wb = null; foamRows = []; geoRows = [];
-  THK_COLS = []; THK_MAP = new Map();
+  const foam = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
+  const geo  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
+  const wool = XLSX.utils.sheet_to_json(s3, { defval: "" });
+  const stack = XLSX.utils.sheet_to_json(s4, { defval: "" });
 
-  setInputsEnabled(false);
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    foamRows: foam,
+    geoRows: geo,
+    woolRows: wool,
+    stackRows: stack
+  };
+}
 
-  wb = await loadWorkbookFromSharePoint();
-  const s1 = wb.Sheets[wb.SheetNames[0]];
-  const s2 = wb.Sheets[wb.SheetNames[1]];
+function applyDbToApp(db){
+  // Set globals used by your existing logic
+  wb = { loaded: true }; // truthy to satisfy "complete" checks
 
-  foamRows = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
-  geoRows  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
+  foamRows = Array.isArray(db.foamRows) ? db.foamRows : [];
+  geoRows  = Array.isArray(db.geoRows) ? db.geoRows : [];
+  woolRows = Array.isArray(db.woolRows) ? db.woolRows : [];
+  stackRows = Array.isArray(db.stackRows) ? db.stackRows : [];
+
   buildThkMaps();
-
-  // ---- Load Wool Sheets (3 & 4) ----
-  const s3 = wb.Sheets[wb.SheetNames[2]];
-  const s4 = wb.Sheets[wb.SheetNames[3]];
-  woolRows = XLSX.utils.sheet_to_json(s3, { defval: "" });
-  stackRows = XLSX.utils.sheet_to_json(s4, { defval: "" });
   populateWoolPadSizes();
 
   setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
@@ -1105,8 +1039,37 @@ async function loadAll(){
   setInputsEnabled(true);
   els.btnReset.disabled = false;
 
-  setStatus(`Loaded. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
   recomputeFoam();
+  updateDebugAndButtons();
+}
+
+async function loadAll(){
+  setStatus("Loading data…", null);
+
+  // Clear state
+  wb = null; foamRows = []; geoRows = []; woolRows = []; stackRows = [];
+  THK_COLS = []; THK_MAP = new Map();
+  setInputsEnabled(false);
+
+  // 1) Try Excel
+  try {
+    const wbExcel = await loadWorkbookFromSharePointAttempt();
+    const db = workbookToDb(wbExcel);
+
+    // OPTIONAL: keep JSON fresh for everyone when YOU load Excel
+    // if (isAdminMode()) await pushDbUpdate(db);
+
+    applyDbToApp(db);
+    setStatus(`Loaded from EXCEL. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
+    return;
+  } catch (e) {
+    console.warn("Excel load failed; falling back to JSON.", e);
+  }
+
+  // 2) Fallback JSON
+  const db = await loadDbFromGitHub();
+  applyDbToApp(db);
+  setStatus(`Loaded from JSON fallback. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
 }
 
 function setInputsEnabled(on){
@@ -1233,7 +1196,6 @@ els.btnReset.addEventListener("click", ()=>{
   els.foamLoopType.value="";
   els.foamHole.value="";
   els.foamNotes.value="";
-  // Reset wool
   if (els.woolPadSize) els.woolPadSize.value="";
   if (els.woolNap) els.woolNap.value="";
   if (els.woolYarn) els.woolYarn.value="";
@@ -1264,8 +1226,6 @@ els.foamHole.addEventListener("change", updateDebugAndButtons);
 els.foamNotes.addEventListener("input", updateDebugAndButtons);
 if (els.woolNotes) els.woolNotes.addEventListener("input", updateDebugAndButtons);
 
-
-// Wool events
 if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolYarn) els.woolYarn.addEventListener("change", ()=>{ recomputeWoolAll(); });
@@ -1275,23 +1235,22 @@ if (els.woolMil) els.woolMil.addEventListener("change", ()=>{ recomputeWoolAll()
 if (els.woolOrientation) els.woolOrientation.addEventListener("change", ()=>{ updateDebugAndButtons(); });
 if (els.woolPrint) els.woolPrint.addEventListener("change", ()=>{ updateDebugAndButtons(); });
 
-// Product type radio events
 document.querySelectorAll('input[name="prodType"]').forEach(r => r.addEventListener("change", ()=>{ updateMode(); updateDebugAndButtons(); }));
 
 (function init(){
   setStatus("Not loaded", null);
   showDebug("—");
-  setSelectOptions(els.foamColor, [], "Load XLSX first", false);
-  setSelectOptions(els.foamThickness, [], "Load XLSX first", false);
-  setSelectOptions(els.foamWheel, [], "Load XLSX first", false);
-  setSelectOptions(els.foamPadSize, [], "Load XLSX first", false);
+  setSelectOptions(els.foamColor, [], "Load data first", false);
+  setSelectOptions(els.foamThickness, [], "Load data first", false);
+  setSelectOptions(els.foamWheel, [], "Load data first", false);
+  setSelectOptions(els.foamPadSize, [], "Load data first", false);
   els.foamPartColorRow.classList.add("hidden");
-  if (els.woolPadSize) setSelectOptions(els.woolPadSize, [], "Load XLSX first", false);
-  if (els.woolNap) setSelectOptions(els.woolNap, [], "Load XLSX first", false);
-  if (els.woolYarn) setSelectOptions(els.woolYarn, [], "Load XLSX first", false);
-  if (els.woolBacking) setSelectOptions(els.woolBacking, [], "Load XLSX first", false);
-  if (els.woolPoly) setSelectOptions(els.woolPoly, [], "Load XLSX first", false);
-  if (els.woolMil) setSelectOptions(els.woolMil, [], "Load XLSX first", false);
+  if (els.woolPadSize) setSelectOptions(els.woolPadSize, [], "Load data first", false);
+  if (els.woolNap) setSelectOptions(els.woolNap, [], "Load data first", false);
+  if (els.woolYarn) setSelectOptions(els.woolYarn, [], "Load data first", false);
+  if (els.woolBacking) setSelectOptions(els.woolBacking, [], "Load data first", false);
+  if (els.woolPoly) setSelectOptions(els.woolPoly, [], "Load data first", false);
+  if (els.woolMil) setSelectOptions(els.woolMil, [], "Load data first", false);
   setInputsEnabled(false);
   updateMode();
 })();
