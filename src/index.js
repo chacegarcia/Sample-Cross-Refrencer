@@ -7,98 +7,94 @@ export default {
       "Access-Control-Allow-Headers": "Content-Type, Authorization"
     };
 
-    if (request.method === "OPTIONS")
+    if (request.method === "OPTIONS") {
       return new Response(null, { headers: cors });
-
-    if (request.method === "POST") {
-
-      const auth = request.headers.get("Authorization") || "";
-      const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (!token)
-        return new Response("Missing Microsoft token", { status: 401, headers: cors });
-
-      try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-
-        if (payload.tid !== env.ALLOWED_TENANT)
-          return new Response("Wrong tenant", { status: 401, headers: cors });
-
-      } catch {
-        return new Response("Invalid token", { status: 401, headers: cors });
-      }
-
-      // continue to GitHub commit logic here
-      return await handleGitHubUpdate(request, env, cors);
     }
 
-    return new Response("db-updater running");
-  }
-};
+    // -----------------------------
+    // Only POST is allowed to update DB
+    // -----------------------------
+    if (request.method !== "POST") {
+      return new Response("db-updater running", { headers: cors });
+    }
 
+    // -----------------------------
+    // 1) Require Microsoft ID token
+    // -----------------------------
+    const auth = request.headers.get("Authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
 
-    // ---- Parse incoming JSON ----
+    if (!token) {
+      return new Response("Missing Microsoft login", { status: 401, headers: cors });
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(atob(token.split(".")[1]));
+    } catch {
+      return new Response("Invalid login token", { status: 401, headers: cors });
+    }
+
+    // -----------------------------
+    // 2) Tenant restriction (THE SECURITY)
+    // -----------------------------
+    if (payload.tid !== env.ALLOWED_TENANT) {
+      return new Response("Wrong tenant", { status: 403, headers: cors });
+    }
+
+    // -----------------------------
+    // 3) Read incoming DB JSON
+    // -----------------------------
     let body;
     try {
       body = await request.json();
     } catch {
-      return new Response("Invalid JSON", { status: 400, headers: cors });
+      return new Response("Bad JSON", { status: 400, headers: cors });
     }
 
-    const owner = env.GITHUB_OWNER;
-    const repo = env.GITHUB_REPO;
-    const path = env.GITHUB_PATH;
+    const content = JSON.stringify(body, null, 2);
+    const encoded = btoa(unescape(encodeURIComponent(content)));
 
-    if (!env.GITHUB_TOKEN || !owner || !repo || !path) {
-      return new Response("Missing GitHub env vars", { status: 500, headers: cors });
+    const apiBase = `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/contents/${env.GITHUB_PATH}`;
+
+    // -----------------------------
+    // 4) Get current file SHA
+    // -----------------------------
+    let sha = null;
+    const existing = await fetch(apiBase, {
+      headers: {
+        "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
+        "User-Agent": "db-updater"
+      }
+    });
+
+    if (existing.status === 200) {
+      const json = await existing.json();
+      sha = json.sha;
     }
 
-    // ---- Get existing file (to read SHA) ----
-    const apiBase = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const ghHeaders = {
-      "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
-      "User-Agent": "cf-worker",
-      "Accept": "application/vnd.github+json",
-      "Content-Type": "application/json"
-    };
-
-    const currentRes = await fetch(apiBase, { headers: ghHeaders });
-    if (!currentRes.ok) {
-      const t = await currentRes.text().catch(() => "");
-      return new Response(`Failed to read current file: ${t}`, { status: 500, headers: cors });
-    }
-    const current = await currentRes.json();
-
-    // ---- Write updated content ----
-    // Ensure the JSON has some consistent metadata
-    const payload = {
-      version: body.version ?? 1,
-      updatedAt: new Date().toISOString(),
-      foamRows: body.foamRows ?? body.rows?.foamRows ?? [],
-      geoRows: body.geoRows ?? body.rows?.geoRows ?? [],
-      woolRows: body.woolRows ?? body.rows?.woolRows ?? [],
-      stackRows: body.stackRows ?? body.rows?.stackRows ?? []
-    };
-
-    const contentStr = JSON.stringify(payload, null, 2);
-    const contentBase64 = btoa(unescape(encodeURIComponent(contentStr))); // ok in Worker runtime
-
-    const putRes = await fetch(apiBase, {
+    // -----------------------------
+    // 5) Commit update to GitHub
+    // -----------------------------
+    const commitRes = await fetch(apiBase, {
       method: "PUT",
-      headers: ghHeaders,
+      headers: {
+        "Authorization": `Bearer ${env.GITHUB_TOKEN}`,
+        "Content-Type": "application/json",
+        "User-Agent": "db-updater"
+      },
       body: JSON.stringify({
-        message: "Update db/data.json from tool",
-        content: contentBase64,
-        sha: current.sha
+        message: "Update DB from Excel sync",
+        content: encoded,
+        sha
       })
     });
 
-    if (!putRes.ok) {
-      const t = await putRes.text().catch(() => "");
-      return new Response(`Failed to update file: ${t}`, { status: 500, headers: cors });
+    if (!commitRes.ok) {
+      const txt = await commitRes.text();
+      return new Response(txt, { status: 500, headers: cors });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...cors, "content-type": "application/json" }
-    });
+    return new Response(JSON.stringify({ ok: true }), { headers: cors });
   }
 };
