@@ -429,7 +429,14 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
-const loginRequest = { scopes: ["Files.Read"] };
+let lastIdToken = null;
+msalInstance.handleRedirectPromise().then((res) => {
+  if (res?.idToken) lastIdToken = res.idToken;
+}).catch(console.error);
+
+const loginRequest = {
+  scopes: ["openid", "profile", "email", "Files.Read"]
+};
 
 // Modern base64url encoding (no deprecated unescape)
 function base64UrlEncode(str) {
@@ -515,18 +522,22 @@ async function loadDbFromGitHub() {
  * PUSH JSON (optional)
  ***********************/
 async function pushDbUpdate(dbObject) {
+
+  if (!idToken) throw new Error("Not signed in");
+
   const res = await fetch(WORKER_PUSH_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${idToken}`
+    },
     body: JSON.stringify(dbObject)
   });
 
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`Push failed (${res.status}): ${t}`);
-  }
+  if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
 
 /***********************
  * YOUR APP LOGIC (unchanged below, except loadAll uses smart loader)
