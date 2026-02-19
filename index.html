@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>LCM Sample Configurator</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+  <link rel="icon" href="favicon.ico" />
+
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.39.0/lib/msal-browser.min.js"></script>
 
   
   <style>
@@ -429,13 +431,11 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
-// ---- Tenant gate ----
-const TENANT_ID = "05281171-4b56-433b-95a7-ae79c44929d3";
-
-// Capture ID token after redirect (used only for admin push)
 let lastIdToken = null;
+msalInstance.handleRedirectPromise().then((res) => {
+  if (res?.idToken) lastIdToken = res.idToken;
+}).catch(console.error);
 
-// Login scopes: OpenID for identity + Files.Read for Graph download
 const loginRequest = {
   scopes: ["openid", "profile", "email", "Files.Read"]
 };
@@ -448,47 +448,13 @@ function base64UrlEncode(str) {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-function getAccount() {
-  return msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0] || null;
-}
-
-function getTenantFromAccount(acct) {
-  return acct?.idTokenClaims?.tid || null;
-}
-
-function isTenantOk() {
-  const acct = getAccount();
-  const tid = getTenantFromAccount(acct);
-  return !!(acct && tid && tid === TENANT_ID);
-}
-
-/**
- * If not signed in (or tenant mismatch), redirect to login.
- * We set a flag so after redirect we can auto-run the load once.
- */
-function requireLoginRedirect() {
-  sessionStorage.setItem("afterLoginDoLoad", "1");
-  msalInstance.loginRedirect(loginRequest);
-}
-
-async function ensureSignedInForTenant() {
-  const acct = getAccount();
-  const tid = getTenantFromAccount(acct);
-
-  if (!acct || !tid) return false;
-  if (tid !== TENANT_ID) return false;
-
-  msalInstance.setActiveAccount(acct);
-  return true;
-}
-
 /**
  * Silent-only token attempt:
- * - If user isn't already signed in / can't get token silently -> return null (so we fall back to JSON)
- * - IMPORTANT: no redirects for normal users inside token acquisition
+ * - If user isn't already signed in / can't get token silently -> return null (so we fallback to JSON)
+ * - IMPORTANT: no redirects for normal users
  */
 async function getAccessTokenSilentOnly() {
-  const account = getAccount();
+  const account = msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0];
   if (!account) return null;
 
   msalInstance.setActiveAccount(account);
@@ -506,42 +472,17 @@ async function getAccessTokenSilentOnly() {
  */
 function ensureLoginIfAdmin() {
   if (!isAdminMode()) return;
-  if (!getAccount()) {
-    requireLoginRedirect();
+  const account = msalInstance.getAllAccounts()[0];
+  if (!account) {
+    msalInstance.loginRedirect(loginRequest);
   }
 }
 
-// Bootstrap MSAL once (process redirect result)
-(async () => {
-  try {
-    const res = await msalInstance.handleRedirectPromise();
-    if (res?.account) msalInstance.setActiveAccount(res.account);
-    if (res?.idToken) lastIdToken = res.idToken;
+// Process redirect results once; then optionally force admin login
+msalInstance.handleRedirectPromise()
+  .then(() => ensureLoginIfAdmin())
+  .catch(console.error);
 
-    // If you open with ?admin=1, auto-start sign-in
-    ensureLoginIfAdmin();
-
-    // If we just came back from login, auto-run Load
-    if (sessionStorage.getItem("afterLoginDoLoad") === "1") {
-      sessionStorage.removeItem("afterLoginDoLoad");
-      // only proceed if tenant matches
-      if (await ensureSignedInForTenant()) {
-        // auto-load data
-        loadAll().catch(e => {
-          console.error(e);
-          setStatus(String(e), false);
-          showDebug(String(e));
-          setInputsEnabled(false);
-        });
-      } else {
-        setStatus("Access denied (tenant mismatch).", false);
-        setInputsEnabled(false);
-      }
-    }
-  } catch (e) {
-    console.error(e);
-  }
-})();
 /***********************
  * LOAD EXCEL (attempt)
  ***********************/
@@ -584,13 +525,13 @@ async function loadDbFromGitHub() {
  ***********************/
 async function pushDbUpdate(dbObject) {
 
-  if (!lastIdToken) throw new Error("Not signed in");
+  if (!idToken) throw new Error("Not signed in");
 
   const res = await fetch(WORKER_PUSH_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${lastIdToken}`
+      "Authorization": `Bearer ${idToken}`
     },
     body: JSON.stringify(dbObject)
   });
@@ -1129,21 +1070,13 @@ async function loadAll(){
     const db = workbookToDb(wbExcel);
 
     // OPTIONAL: keep JSON fresh for everyone when YOU load Excel
-    if (isAdminMode() && (getCachedAccount()?.username || "").toLowerCase() === "chace_garcia@lakecountrymfg.com") {
-  await pushDbUpdate(db);
-  }
-
+    if (isAdminMode()) await pushDbUpdate(db);
 
     applyDbToApp(db);
     setStatus(`Loaded from EXCEL. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
     return;
   } catch (e) {
     console.warn("Excel load failed; falling back to JSON.", e);
-  }
-
-  // Tenant gate for JSON fallback: only allow if we have a validated tenant login cached
-  if (!isTenantOk()) {
-    throw new Error("Sign-in required (tenant) to use JSON fallback.");
   }
 
   // 2) Fallback JSON
@@ -1260,21 +1193,8 @@ function exportTestBOM(){
 }
 
 els.btnLoad.addEventListener("click", async ()=>{
-  try {
-    // Require tenant sign-in before allowing ANY load (even JSON fallback)
-    const ok = await ensureSignedInForTenant();
-    if (!ok) {
-      setStatus("Sign-in required.", false);
-      setInputsEnabled(false);
-      requireLoginRedirect();
-      return;
-    }
-    await loadAll();
-  } catch (e){
-    setStatus(String(e), false);
-    showDebug(String(e));
-    setInputsEnabled(false);
-  }
+  try { await loadAll(); }
+  catch (e){ setStatus(String(e), false); showDebug(String(e)); setInputsEnabled(false); }
 });
 
 els.btnReset.addEventListener("click", ()=>{
