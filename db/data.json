@@ -1,4 +1,1667 @@
 {
-  "updatedAt": null,
-  "rows": []
+  "version": 1,
+  "updatedAt": "2026-02-19T01:37:30.024Z",
+  "foamRows": [
+    {
+      "Color": "BLACK",
+      "Part": "Z45447",
+      "Part Color": "Bulpren Black",
+      "Thickness": 0.625,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z64328",
+      "Part Color": "Bulpren Black",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z74607",
+      "Part Color": "Bulpren Black",
+      "Thickness": 0.75,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z91384",
+      "Part Color": "Bulpren Black",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z90800",
+      "Part Color": "Bulpren Black",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z90551",
+      "Part Color": "Bulpren Charcoal",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z95648",
+      "Part Color": "Bulpren Black",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK/GREY",
+      "Part": "Z67625",
+      "Part Color": "HD Orbital BLK/GREY",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z64111",
+      "Part Color": "Black Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z15693-MSW-875",
+      "Part Color": "Z280-CLBB BLK MSW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLACK",
+      "Part": "Z15694-MINI-ST2",
+      "Part Color": "z280-CLBB Black MS2TALL",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z41012",
+      "Part Color": "POTT 465 BRITE WHT",
+      "Thickness": 0.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "ZV10R",
+      "Part Color": "V10 Reticulated White",
+      "Thickness": 0.625,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z64327",
+      "Part Color": "POTT 465 NR White",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "ZV10R-WHITE-750",
+      "Part Color": "V10 Reticulate White",
+      "Thickness": 0.75,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE/TEAL",
+      "Part": "Z95382",
+      "Part Color": "HD ORBITAL TEAL/WHT",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z25325",
+      "Part Color": "S295 Natural WHT",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z89154",
+      "Part Color": "POTT 465 NR White",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z34212",
+      "Part Color": "POTT 465 NR White",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z55576",
+      "Part Color": "S295 Natural WHT",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z64158",
+      "Part Color": "55 HF White Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z64156",
+      "Part Color": "BRITE White Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z15692-MSW-875",
+      "Part Color": "55HF White MSW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z15674-MINI-ST2",
+      "Part Color": "White MS2TALL Waffle",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z12900",
+      "Part Color": "S295 NAT WHITE",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z55HF-150-FLAT-NL",
+      "Part Color": "HF FLAT WHITE",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "WHITE",
+      "Part": "Z55HF-875-FLAT-NL",
+      "Part Color": "HF FLAT 55 WHITE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREY",
+      "Part": "Z65352",
+      "Part Color": "DRUA 250 GREY",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREY",
+      "Part": "Z65353",
+      "Part Color": "DURA 250 GREY",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREY",
+      "Part": "Z65354",
+      "Part Color": "DURA 250 GREY",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z64329",
+      "Part Color": "Bulpren Red",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z85635",
+      "Part Color": "DURA 70 Maroon",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z94314",
+      "Part Color": "Z70HH Red RET",
+      "Thickness": 0.867,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z74959",
+      "Part Color": "Bulpren Red",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z83302",
+      "Part Color": "DURA 70 Maroon",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z69429",
+      "Part Color": "POTT 465 R Red",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z68304",
+      "Part Color": "Bulpren Red",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z69428",
+      "Part Color": "POTT 465 R Red",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z66032",
+      "Part Color": "HD Orbital RED/GREY",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z64115",
+      "Part Color": "REGI 60 Red Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "RED",
+      "Part": "Z91495",
+      "Part Color": "Bulpren Red Waffle",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z76117",
+      "Part Color": "DURA 80 ORANGE",
+      "Thickness": 0.625,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z83140",
+      "Part Color": "POTT 580R ORANGE",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z64326",
+      "Part Color": "POTT 760R ORANGE",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z78783",
+      "Part Color": "DURA 80 ORANGE",
+      "Thickness": 0.75,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z91838",
+      "Part Color": "POTT 580R ORANGE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z45554",
+      "Part Color": "POTT 760R ORANGE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z91214",
+      "Part Color": "PPF8 ORANGE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z33211",
+      "Part Color": "POTT 580R ORANGE",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z46381",
+      "Part Color": "POTT 760R ORANGE",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z92187",
+      "Part Color": "POTT 580R ORANGE",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE/GREY",
+      "Part": "Z66031",
+      "Part Color": "HD Orbital ORG/GREY",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z64112",
+      "Part Color": "POTT 580R ORG Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z15687-MSW-875",
+      "Part Color": "PPX8 ORG MINI STD",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "ORANGE",
+      "Part": "Z15688-MINI-ST2",
+      "Part Color": "Orange MINI STD2TALL",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z78202",
+      "Part Color": "DURAX75Y YELLOW",
+      "Thickness": 0.625,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z93871",
+      "Part Color": "DURAX75Y YELLOW",
+      "Thickness": 0.75,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z73871",
+      "Part Color": "DURA 80 YELLOW",
+      "Thickness": 0.867,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z73100",
+      "Part Color": "DURA 80 YELLOW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z73687",
+      "Part Color": "Z70CC YELLOW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z39605",
+      "Part Color": "100PPI GOLD",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z73101",
+      "Part Color": "DURA 80 YELLOW",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z01775-0-00-000",
+      "Part Color": "V8 Mittel YELLOW",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z92185",
+      "Part Color": "Z270CC YELLOW",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z34524",
+      "Part Color": "FP X80 GOLD",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z63532",
+      "Part Color": "YELLOW Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "YELLOW",
+      "Part": "Z15696-MSW-875",
+      "Part Color": "DURA070YO YLW MSW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREEN",
+      "Part": "Z92169",
+      "Part Color": "Bulpren Green",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREEN",
+      "Part": "Z0350C-0-WL-100",
+      "Part Color": "PPF8 350C Green NR",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREEN",
+      "Part": "Z67573",
+      "Part Color": "Bulpren Green",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREEN",
+      "Part": "Z64113",
+      "Part Color": "REGI 60 Green Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "GREEN",
+      "Part": "Z92169",
+      "Part Color": "Soft Mint Green",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z69449",
+      "Part Color": "DURA 50 BLUE",
+      "Thickness": 0.6875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z69375",
+      "Part Color": "DURA 50 BLUE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z74503",
+      "Part Color": "POTT 465R BLUE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z47412",
+      "Part Color": "S-70 BLUE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE/GREY",
+      "Part": "Z68024",
+      "Part Color": "HD Orbital BLUE/GREY",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE/TEAL",
+      "Part": "Z95384",
+      "Part Color": "HD ORBITAL TEAL/BLUE",
+      "Thickness": 1,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z75629",
+      "Part Color": "POTT 465R BLUE",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z37272",
+      "Part Color": "S-70 BLUE",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z64114",
+      "Part Color": "REGI 60 BLUE Crosscut",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z15587",
+      "Part Color": "DURA 50 MSW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z15684",
+      "Part Color": "BABY BLUE MSW",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z100PPI-875-FLAT-NL",
+      "Part Color": "BABY BLUE ",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "BLUE",
+      "Part": "Z100PPI-150-FLAT-NL",
+      "Part Color": "BABY BLUE",
+      "Thickness": 1.5,
+      "Firmness": ""
+    },
+    {
+      "Color": "PURPLE",
+      "Part": "Z44806",
+      "Part Color": "Z48B PURPLE",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "PURPLE",
+      "Part": "Z42219",
+      "Part Color": "Z48B PURPLE",
+      "Thickness": 1.25,
+      "Firmness": ""
+    },
+    {
+      "Color": "PINK",
+      "Part": "Z42010",
+      "Part Color": "PINK 60PPI",
+      "Thickness": 0.875,
+      "Firmness": ""
+    },
+    {
+      "Color": "PINK",
+      "Part": "Z38064",
+      "Part Color": "PINK 60PPI",
+      "Thickness": 1.25,
+      "Firmness": ""
+    }
+  ],
+  "geoRows": [
+    {
+      "Wheel": "HDO/SDO",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "Y",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "HDO/SDO",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "Y",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "HDO/SDO",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "Y",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "FR",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "FR",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "FR",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Std",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Std",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Std",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Hybrid / PR",
+      "Pad Sizes": 8,
+      "Grinded Loop Dia": 7.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": "Y"
+    },
+    {
+      "Wheel": "Hybrid / PR",
+      "Pad Sizes": 7,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": "Y"
+    },
+    {
+      "Wheel": "Hybrid / PR",
+      "Pad Sizes": 6,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": "Y"
+    },
+    {
+      "Wheel": "Hybrid / PR",
+      "Pad Sizes": 4,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": "Y"
+    },
+    {
+      "Wheel": "7/8 Buffback",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "7/8 Buffback",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "7/8 Buffback",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "1.25 Buffback",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "1.25 Buffback",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Boss",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Boss",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Griots Boss",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Better Edge",
+      "Pad Sizes": 8,
+      "Grinded Loop Dia": 7,
+      "THK_0.875": "",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": "Y"
+    },
+    {
+      "Wheel": "Menzerna",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Menzerna",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "Menzerna",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "Y",
+      "THK_1": "",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "UDO",
+      "Pad Sizes": 6.5,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "UDO",
+      "Pad Sizes": 5.5,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "UDO",
+      "Pad Sizes": 3.5,
+      "Grinded Loop Dia": 3.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "35 Degree",
+      "Pad Sizes": 6.75,
+      "Grinded Loop Dia": 6.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    },
+    {
+      "Wheel": "35 Degree",
+      "Pad Sizes": 5.75,
+      "Grinded Loop Dia": 5.0625,
+      "THK_0.875": "",
+      "THK_1": "Y",
+      "THK_1.25": "Y",
+      "THK_1.5": ""
+    }
+  ],
+  "woolRows": [
+    {
+      "Part Num": "93-400",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-401",
+      "Final OD": 4,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 4.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 7.75,
+      "Substrate Part": "NONWOVEN-7.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-402",
+      "Final OD": 5.5,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 5.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 7.75,
+      "Substrate Part": "NONWOVEN-7.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-403",
+      "Final OD": 6,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 6.25,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7,
+      "Substrate Part": "Surlyn-7-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-404",
+      "Final OD": 6,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.25,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7,
+      "Substrate Part": "Surlyn-7-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-405",
+      "Final OD": 6.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-406",
+      "Final OD": 6.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-407",
+      "Final OD": 7.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-408",
+      "Final OD": 7.5,
+      "Nap Length": 1.25,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-409",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-410",
+      "Final OD": 7.5,
+      "Nap Length": 2,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-411",
+      "Final OD": 8,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 8,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 9,
+      "Substrate Part": "Surlyn-9-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-412",
+      "Final OD": 8,
+      "Nap Length": 1.25,
+      "Op Tufted Pad Dia": 8,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 9,
+      "Substrate Part": "Surlyn-9-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-413",
+      "Final OD": 8,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 8,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 9,
+      "Substrate Part": "Surlyn-9-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-500",
+      "Final OD": 3,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-501",
+      "Final OD": 4,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 4.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 7.75,
+      "Substrate Part": "NONWOVEN-7.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-502",
+      "Final OD": 6.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-503",
+      "Final OD": 7.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-504",
+      "Final OD": 7.5,
+      "Nap Length": 1.25,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-505",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Untwisted",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-600",
+      "Final OD": 6.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "50/50",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-601",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "50/50",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-700",
+      "Final OD": 6.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "Yellow",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-701",
+      "Final OD": 7.5,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Yellow",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-702",
+      "Final OD": 7.5,
+      "Nap Length": 1.25,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Yellow",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-703",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Yellow",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-800",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "Blue/Teal",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-801",
+      "Final OD": 6,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.25,
+      "Yarn": "Blue/Teal",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7,
+      "Substrate Part": "Surlyn-7-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-802",
+      "Final OD": 6.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "Blue/Teal",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-803",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Blue/Teal",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-804",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "Bamboo",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-805",
+      "Final OD": 6,
+      "Nap Length": 1,
+      "Op Tufted Pad Dia": 6.25,
+      "Yarn": "Bamboo",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7,
+      "Substrate Part": "Surlyn-7-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-806",
+      "Final OD": 6.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 6.75,
+      "Yarn": "Bamboo",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 7.5,
+      "Substrate Part": "Surlyn-7.5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-807",
+      "Final OD": 7.5,
+      "Nap Length": 1.5,
+      "Op Tufted Pad Dia": 7.75,
+      "Yarn": "Bamboo",
+      "Substrate Type": "White Surlyn",
+      "Substrate Size": 8.75,
+      "Substrate Part": "Surlyn-8.75-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-900",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-901",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    },
+    {
+      "Part Num": "93-902",
+      "Final OD": 3,
+      "Nap Length": 0.75,
+      "Op Tufted Pad Dia": 3.75,
+      "Yarn": "100% Nat Twisted",
+      "Substrate Type": "Unwoven",
+      "Substrate Size": 5,
+      "Substrate Part": "NONWOVEN-5-SUB",
+      "__EMPTY": "",
+      "__EMPTY_1": "",
+      "__EMPTY_2": "",
+      "__EMPTY_3": "",
+      "__EMPTY_4": "",
+      "__EMPTY_5": ""
+    }
+  ],
+  "stackRows": [
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "white",
+      "Poly Dia": 8,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "28MIL-WHITE-POLY-8-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "white",
+      "Poly Dia": 7.75,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "28MIL-WHITE-POLY-7.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "white",
+      "Poly Dia": 7,
+      "Backing Size": 6,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "28MIL-WHITE-POLY-7-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "white",
+      "Poly Dia": 6.75,
+      "Backing Size": 6,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "28MIL-WHITE-POLY-6.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "clear",
+      "Poly Dia": 8,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "28MIL-CLEAR-POLY-8-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "clear",
+      "Poly Dia": 7.75,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "28MIL-CLEAR-POLY-7.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "clear",
+      "Poly Dia": 6.75,
+      "Backing Size": 6,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "28MIL-CLEAR-POLY-6.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "clear",
+      "Poly Dia": 6.25,
+      "Backing Size": 5.25,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "28MIL-CLEAR-POLY-6.25-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 28,
+      "Poly Type": "clear",
+      "Poly Dia": 3.5,
+      "Backing Size": 2.875,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "28MIL-CLEAR-POLY-3.5-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 8,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "15MIL-CLEAR-POLY-8-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 7.75,
+      "Backing Size": 6.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "15MIL-CLEAR-POLY-7.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 6.75,
+      "Backing Size": 6,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "15MIL-CLEAR-POLY-6.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 6.25,
+      "Backing Size": 5.25,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "15MIL-CLEAR-POLY-6.25-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 6,
+      "Backing Size": 4.25,
+      "Loop": "",
+      "Canvas": "Y",
+      "Poly Part": "15MIL-CLEAR-POLY-6-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 5.75,
+      "Backing Size": 4.25,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "15MIL-CLEAR-POLY-5.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 3.75,
+      "Backing Size": 2.875,
+      "Loop": "Y",
+      "Canvas": "Y",
+      "Poly Part": "15MIL-CLEAR-POLY-3.75-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 3.5,
+      "Backing Size": 2.875,
+      "Loop": "Y",
+      "Canvas": "",
+      "Poly Part": "15MIL-CLEAR-POLY-3.5-SUB",
+      "__EMPTY": ""
+    }
+  ]
 }
