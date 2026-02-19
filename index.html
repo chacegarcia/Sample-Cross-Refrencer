@@ -541,7 +541,6 @@ async function loadDbFromGitHub() {
  ***********************/
 async function pushDbUpdate(dbObject) {
   if (!lastIdToken) {
-    // try to get it silently on refresh
     lastIdToken = await acquireIdTokenForPushIfPossible();
   }
   if (!lastIdToken) throw new Error("Not signed in (no id token).");
@@ -671,9 +670,7 @@ function splitMaybeComma(v){
   return s.split(",").map(x=>x.trim()).filter(Boolean);
 }
 
-/* ===== Tufted Wool / rest of your logic stays the same ===== */
-/* (Everything below is unchanged from your original — only load gating + MSAL cleanup above.) */
-
+/* ===== Tufted Wool ===== */
 function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
 
 function populateWoolPadSizes(){
@@ -784,8 +781,10 @@ function recomputeWoolAll(){
   recomputeWoolNap();
   recomputeWoolYarn();
   recomputeWoolStack();
+  updateDebugAndButtons(); // IMPORTANT: enables download button in wool/json path
 }
 
+/* ===== Mode ===== */
 let currentMode = "foam";
 function updateMode(){
   const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
@@ -794,6 +793,7 @@ function updateMode(){
   document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
 }
 
+/* ===== Excel sheet parsing helpers ===== */
 function hnorm(s){
   return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
 }
@@ -956,35 +956,52 @@ function updateDebugAndButtons(){
   }
 
   const out = {
-    sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length },
+    sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length, woolRows: woolRows.length, stackRows: stackRows.length },
     selections: {
-      color: els.foamColor.value,
-      thickness: els.foamThickness.value,
+      productType: currentMode,
+      color: els.foamColor.value || null,
+      thickness: els.foamThickness.value || null,
       partColor: els.foamPartColor.value || null,
       wheel: wheel || null,
       padSize: pad || null,
       qty: els.foamQty.value,
       loopType: els.foamLoopType.value || null,
-      finishedPad: els.foamHole.value || null
+      finishedPad: els.foamHole.value || null,
+      wool: {
+        padSize: els.woolPadSize?.value || null,
+        nap: els.woolNap?.value || null,
+        yarn: els.woolYarn?.value || null,
+        backing: els.woolBacking?.value || null,
+        poly: els.woolPoly?.value || null,
+        mil: els.woolMil?.value || null,
+        orientation: els.woolOrientation?.value || null,
+        print: els.woolPrint?.value || null,
+      }
     },
     resolvedFoam: foamResolved ? {
       part: norm(foamResolved[COL.foam_part]),
       partColor: norm(foamResolved[COL.foam_partColor]),
       firmness: norm(foamResolved[COL.foam_firmness])
     } : null,
-    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null
+    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null,
+    resolvedWoolBase: resolveWoolBase() ? { partNum: norm(resolveWoolBase()["Part Num"] || "") } : null,
+    resolvedWoolStack: resolveWoolStackFinal() ? { polyType: norm(resolveWoolStackFinal()["Poly Type"] || "") } : null
   };
   showDebug(out);
 
   const hasName = (norm(els.reqName.value) || norm(els.sampleName.value));
   const foamComplete = !!(wb && foamResolved && wheel && pad);
   const woolComplete = isWoolComplete();
-  const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
+
+  const canDownload =
+    hasName &&
+    ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
+
   els.btnDownload.disabled = !canDownload;
 }
 
 /***********************
- * Smart loader (Excel -> JSON), but tenant-gated
+ * Smart loader (Excel -> JSON), tenant-gated
  ***********************/
 function workbookToDb(wbIn){
   const s1 = wbIn.Sheets[wbIn.SheetNames[0]];
@@ -1030,11 +1047,11 @@ function applyDbToApp(db){
   els.btnReset.disabled = false;
 
   recomputeFoam();
+  recomputeWoolAll(); // keeps wool in sync too
   updateDebugAndButtons();
 }
 
 async function loadAll(){
-  // HARD GATE: do not load Excel or JSON unless tenant validated
   if (!isTenantOk()) throw new Error("Sign-in required (tenant).");
 
   setStatus("Loading data…", null);
@@ -1076,13 +1093,119 @@ function setInputsEnabled(on){
 }
 
 /***********************
+ * EXPORT (RESTORED)
+ ***********************/
+function safeFileName(str){
+  return String(str||"")
+    .replace(/[\\/:*?"<>|]/g,"")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function buildFileName(){
+  const r = safeFileName(els.reqName.value);
+  const s = safeFileName(els.sampleName.value);
+  if (!r && !s) return "Sample.xlsx";
+  if (!r) return `${s}.xlsx`;
+  if (!s) return `${r}.xlsx`;
+  return `${r} - ${s}.xlsx`;
+}
+
+function exportTestBOM(){
+  // ---- Wool ----
+  if (currentMode==="wool") {
+    const base = resolveWoolBase();
+    const stack = resolveWoolStackFinal();
+
+    if (!base) return alert("Select a valid tufted pad (Final OD + Nap + Yarn).");
+    if (!stack) return alert("Select Backing + Poly Type + MIL (must resolve to one stack row).");
+
+    const aoa = [
+      ["Requested By", norm(els.reqName.value)],
+      ["Sample Name", norm(els.sampleName.value)],
+      ["Generated", new Date().toLocaleString()],
+      [],
+      ["Field","Value"],
+      ["Product Type", "Tufted Wool"],
+      ["Final OD", norm(els.woolPadSize.value)],
+      ["Nap Length", norm(els.woolNap.value)],
+      ["Yarn", norm(els.woolYarn.value)],
+      ["Orientation", norm(els.woolOrientation.value)],
+      ["Backing Type", norm(els.woolBacking.value)],
+      ["Poly Type", norm(els.woolPoly.value)],
+      ["MIL (Sturdyness)", norm(els.woolMil.value)],
+      ["Print", norm(els.woolPrint.value)],
+      [],
+      ["Base Part Num", norm(base["Part Num"])],
+      ["OP Tufted Pad Dia", norm(base["Op Tufted Pad Dia"])],
+      ["Substrate Type", norm(base["Substrate Type"])],
+      ["Substrate Size", norm(base["Substrate Size"])],
+      [],
+      ["Stack Poly Dia", norm(stack["Poly Dia"])],
+      ["Stack Backing Size", norm(stack["Backing Size"])],
+      ["Stack Poly Type", norm(stack["Poly Type"])],
+      ["Stack Poly MIL", norm(stack["Poly Size MIL"])],
+      ["Notes", norm(els.woolNotes?.value)]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, ws, "BOM");
+    XLSX.writeFile(wbOut, buildFileName());
+    return;
+  }
+
+  // ---- Foam ----
+  const foamResolved = resolveFoamRow();
+  if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
+
+  const wheel = els.foamWheel.value;
+  const pad = els.foamPadSize.value;
+  if (!wheel || !pad) return alert("Select Wheel + Pad Size.");
+
+  const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
+
+  let grindDia = "";
+  const row = geoRows.find(r =>
+    normU(r[COL.geo_wheel])===normU(wheel) &&
+    splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad))
+  );
+  if (row) grindDia = norm(row[COL.geo_grindDia]);
+
+  const aoa = [
+    ["Requested By", norm(els.reqName.value)],
+    ["Sample Name", norm(els.sampleName.value)],
+    ["Generated", new Date().toLocaleString()],
+    [],
+    ["Field","Value"],
+    ["Product Type", "Foam"],
+    ["Foam Part", norm(foamResolved[COL.foam_part])],
+    ["Foam Part Color", norm(foamResolved[COL.foam_partColor])],
+    ["Foam Color", norm(els.foamColor.value)],
+    ["Foam Thickness", norm(els.foamThickness.value)],
+    ["Foam Firmness", norm(foamResolved[COL.foam_firmness])],
+    ["Wheel", wheel],
+    ["Pad Size", pad],
+    ["Grinded Loop Dia", grindDia],
+    ["Qty", qty],
+    ["Loop Type", norm(els.foamLoopType.value)],
+    ["Finished Pad", norm(els.foamHole.value)],
+    ["Notes", norm(els.foamNotes.value)],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+  const wbOut = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbOut, ws, "BOM");
+  XLSX.writeFile(wbOut, buildFileName());
+}
+
+/***********************
  * Events
  ***********************/
 els.btnLoad.addEventListener("click", async ()=>{
   try {
-    // Gate everything behind tenant sign-in (incognito will be forced to login)
     if (!requireTenantOrRedirect()) return;
-
     await loadAll();
   } catch (e){
     setStatus(String(e), false);
@@ -1115,7 +1238,11 @@ els.btnReset.addEventListener("click", ()=>{
   els.foamPartColorRow.classList.add("hidden");
   recomputeFoam();
   recomputeWoolAll();
+  updateDebugAndButtons();
 });
+
+// IMPORTANT: restore export click handler
+els.btnDownload.addEventListener("click", exportTestBOM);
 
 els.reqName.addEventListener("input", updateDebugAndButtons);
 els.sampleName.addEventListener("input", updateDebugAndButtons);
@@ -1129,6 +1256,9 @@ els.foamQty.addEventListener("input", updateDebugAndButtons);
 els.foamLoopType.addEventListener("change", updateDebugAndButtons);
 els.foamHole.addEventListener("change", updateDebugAndButtons);
 els.foamNotes.addEventListener("input", updateDebugAndButtons);
+
+// make sure wool actions can enable export
+if (els.woolNotes) els.woolNotes.addEventListener("input", updateDebugAndButtons);
 
 if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ recomputeWoolAll(); });
 if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ recomputeWoolAll(); });
