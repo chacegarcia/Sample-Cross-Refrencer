@@ -429,6 +429,1356 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
+// ---- Tenant gate ----
+const TENANT_ID = "05281171-4b56-433b-95a7-ae79c44929d3";
+
+// Capture ID token after redirect (used only for admin push)
+let lastIdToken = null;
+
+// Login scopes: OpenID for identity + Files.Read for Graph download
+const loginRequest = {
+  scopes: ["openid", "profile", "email", "Files.Read"]
+};
+
+// Modern base64url encoding (no deprecated unescape)
+function base64UrlEncode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function getAccount() {
+  return msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0] || null;
+}
+
+function getTenantFromAccount(acct) {
+  return acct?.idTokenClaims?.tid || null;
+}
+
+function isTenantOk() {
+  const acct = getAccount();
+  const tid = getTenantFromAccount(acct);
+  return !!(acct && tid && tid === TENANT_ID);
+}
+
+/**
+ * If not signed in (or tenant mismatch), redirect to login.
+ * We set a flag so after redirect we can auto-run the load once.
+ */
+function requireLoginRedirect() {
+  sessionStorage.setItem("afterLoginDoLoad", "1");
+  msalInstance.loginRedirect(loginRequest);
+}
+
+async function ensureSignedInForTenant() {
+  const acct = getAccount();
+  const tid = getTenantFromAccount(acct);
+
+  if (!acct || !tid) return false;
+  if (tid !== TENANT_ID) return false;
+
+  msalInstance.setActiveAccount(acct);
+  return true;
+}
+
+/**
+ * Silent-only token attempt:
+ * - If user isn't already signed in / can't get token silently -> return null (so we fall back to JSON)
+ * - IMPORTANT: no redirects for normal users inside token acquisition
+ */
+async function getAccessTokenSilentOnly() {
+  const account = getAccount();
+  if (!account) return null;
+
+  msalInstance.setActiveAccount(account);
+
+  try {
+    const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
+    return token.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Admin-only: if you open with ?admin=1 and you're not signed in, redirect for login.
+ */
+function ensureLoginIfAdmin() {
+  if (!isAdminMode()) return;
+  if (!getAccount()) {
+    requireLoginRedirect();
+  }
+}
+
+// Bootstrap MSAL once (process redirect result)
+(async () => {
+  try {
+    const res = await msalInstance.handleRedirectPromise();
+    if (res?.account) msalInstance.setActiveAccount(res.account);
+    if (res?.idToken) lastIdToken = res.idToken;
+
+    // If you open with ?admin=1, auto-start sign-in
+    ensureLoginIfAdmin();
+
+    // If we just came back from login, auto-run Load
+    if (sessionStorage.getItem("afterLoginDoLoad") === "1") {
+      sessionStorage.removeItem("afterLoginDoLoad");
+      // only proceed if tenant matches
+      if (await ensureSignedInForTenant()) {
+        // auto-load data
+        loadAll().catch(e => {
+          console.error(e);
+          setStatus(String(e), false);
+          showDebug(String(e));
+          setInputsEnabled(false);
+        });
+      } else {
+        setStatus("Access denied (tenant mismatch).", false);
+        setInputsEnabled(false);
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+})();
+/***********************
+ * LOAD EXCEL (attempt)
+ ***********************/
+async function loadWorkbookFromSharePointAttempt() {
+  const token = await getAccessTokenSilentOnly();
+  if (!token) throw new Error("No token available (silent).");
+
+  const encoded = base64UrlEncode(SHARE_LINK);
+  const url = `https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem/content?cb=${Date.now()}`;
+
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Cache-Control": "no-cache, no-store, max-age=0",
+      Pragma: "no-cache"
+    }
+  });
+
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(`Graph download failed (${res.status}): ${t}`);
+  }
+
+  const buf = await res.arrayBuffer();
+  return XLSX.read(buf, { type: "array" });
+}
+
+/***********************
+ * LOAD JSON FALLBACK
+ ***********************/
+async function loadDbFromGitHub() {
+  const res = await fetch(`${FALLBACK_JSON_PATH}?cb=${Date.now()}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to load ${FALLBACK_JSON_PATH} (${res.status})`);
+  return res.json();
+}
+
+/***********************
+ * PUSH JSON (optional)
+ ***********************/
+async function pushDbUpdate(dbObject) {
+
+  if (!lastIdToken) throw new Error("Not signed in");
+
+  const res = await fetch(WORKER_PUSH_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${lastIdToken}`
+    },
+    body: JSON.stringify(dbObject)
+  });
+
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+
+/***********************
+ * YOUR APP LOGIC (unchanged below, except loadAll uses smart loader)
+ ***********************/
+const COL = {
+  foam_color: "Color",
+  foam_part: "Part",
+  foam_partColor: "Part Color",
+  foam_thickness: "Thickness",
+  foam_firmness: "Firmness",
+  geo_wheel: "Wheel",
+  geo_padSizes: "Pad Sizes",
+  geo_grindDia: "Grinded Loop Dia",
+};
+
+let wb=null;
+let foamRows=[];
+let geoRows=[];
+let woolRows=[];
+let stackRows=[];
+
+const $ = (id)=>document.getElementById(id);
+const els = {
+  btnLoad: $("btnLoad"),
+  btnReset: $("btnReset"),
+  btnDownload: $("btnDownload"),
+  status: $("status"),
+  debug: $("debug"),
+
+  reqName: $("reqName"),
+  sampleName: $("sampleName"),
+
+  foamColor: $("foamColor"),
+  foamThickness: $("foamThickness"),
+  foamPartColorRow: $("foamPartColorRow"),
+  foamPartColor: $("foamPartColor"),
+  foamWheel: $("foamWheel"),
+  foamPadSize: $("foamPadSize"),
+  foamQty: $("foamQty"),
+  foamLoopType: $("foamLoopType"),
+  foamHole: $("foamHole"),
+  foamNotes: $("foamNotes"),
+
+  woolPadSize: $("woolPadSize"),
+  woolNap: $("woolNap"),
+  woolYarn: $("woolYarn"),
+  woolOrientation: $("woolOrientation"),
+  woolBacking: $("woolBacking"),
+  woolPoly: $("woolPoly"),
+  woolMil: $("woolMil"),
+  woolPrint: $("woolPrint"),
+  woolNotes: $("woolNotes"),
+};
+
+function setStatus(text, ok=null){
+  if (!els.status) return;
+  els.status.textContent = text;
+  els.status.classList.remove("ok","bad");
+  if (ok===true) els.status.classList.add("ok");
+  if (ok===false) els.status.classList.add("bad");
+}
+function showDebug(obj){
+  els.debug.textContent = (typeof obj === "string") ? obj : JSON.stringify(obj, null, 2);
+}
+function norm(v){ return String(v ?? "").replace(/\u00A0/g," ").trim(); }
+function normU(v){ return norm(v).toUpperCase(); }
+function toNum(v){
+  const n = parseFloat(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : null;
+}
+function isTruthy(v){
+  const s = normU(v);
+  return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
+}
+
+function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
+  const prev = keepValue ? sel.value : "";
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = options.length ? placeholder : "— No options —";
+  sel.appendChild(ph);
+
+  for(const opt of options){
+    const o=document.createElement("option");
+    o.value=opt;
+    o.textContent=opt;
+    sel.appendChild(o);
+  }
+
+  if (keepValue && prev && options.some(o=>normU(o)===normU(prev))){
+    sel.value = options.find(o=>normU(o)===normU(prev));
+  } else {
+    sel.value = "";
+  }
+  sel.disabled = options.length === 0;
+}
+
+function uniqSorted(rows, colName){
+  const set = new Set();
+  for (const r of rows){
+    const v = norm(r[colName]);
+    if (v) set.add(v);
+  }
+  return Array.from(set).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function splitMaybeComma(v){
+  const s = norm(v);
+  if (!s) return [];
+  return s.split(",").map(x=>x.trim()).filter(Boolean);
+}
+
+// ===== Tufted Wool (Sheets 3 & 4) =====
+function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
+
+function populateWoolPadSizes(){
+  setSelectOptions(els.woolPadSize, uniqSorted(woolRows, "Final OD"), "— Select Pad Size —", false);
+  setSelectOptions(els.woolNap, [], "— Select Nap —", false);
+  setSelectOptions(els.woolYarn, [], "— Select Yarn —", false);
+  setSelectOptions(els.woolBacking, [], "— Select Backing —", false);
+  setSelectOptions(els.woolPoly, [], "— Select Poly —", false);
+  setSelectOptions(els.woolMil, [], "— Select MIL —", false);
+}
+
+function recomputeWoolNap(){
+  const od = els.woolPadSize.value;
+  const naps = od ? uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(od)), "Nap Length") : [];
+  setSelectOptions(els.woolNap, naps, "— Select Nap —", true);
+}
+
+function recomputeWoolYarn(){
+  const od = els.woolPadSize.value;
+  const nap = els.woolNap.value;
+  const rows = woolRows.filter(r =>
+    (!od || normU(r["Final OD"]) === normU(od)) &&
+    (!nap || normU(r["Nap Length"]) === normU(nap))
+  );
+  const yarns = uniqSorted(rows, "Yarn");
+  setSelectOptions(els.woolYarn, yarns, "— Select Yarn —", true);
+}
+
+function resolveWoolDia(){
+  const od = els.woolPadSize.value;
+  const nap = els.woolNap.value;
+  if (!od || !nap) return null;
+  const rows = woolRows.filter(r =>
+    normU(r["Final OD"])===normU(od) &&
+    normU(r["Nap Length"])===normU(nap)
+  );
+  if (!rows.length) return null;
+  const dias = Array.from(new Set(rows.map(r => norm(r["Op Tufted Pad Dia"])).filter(Boolean)));
+  if (dias.length === 1) return dias[0];
+  const yarn = els.woolYarn.value;
+  if (yarn){
+    const r = rows.find(x => normU(x["Yarn"])===normU(yarn));
+    return r ? norm(r["Op Tufted Pad Dia"]) : null;
+  }
+  return null;
+}
+
+function resolveWoolBase(){
+  const od = els.woolPadSize.value;
+  const nap = els.woolNap.value;
+  const yarn = els.woolYarn.value;
+  if (!od || !nap || !yarn) return null;
+  return woolRows.find(r =>
+    normU(r["Final OD"])===normU(od) &&
+    normU(r["Nap Length"])===normU(nap) &&
+    normU(r["Yarn"])===normU(yarn)
+  ) || null;
+}
+
+function stackCandidatesForBase(){
+  const dia = resolveWoolDia();
+  if (!dia) return [];
+  return stackRows.filter(r => norm(r["Poly Dia"]) === dia);
+}
+
+function resolveWoolStackFinal(){
+  const candidates = stackCandidatesForBase();
+  let cand = candidates.slice();
+
+  if (els.woolBacking.value === "Loop") cand = cand.filter(r => isTruthy(r["Loop"]));
+  if (els.woolBacking.value === "Canvas") cand = cand.filter(r => isTruthy(r["Canvas"]));
+
+  if (els.woolPoly.value) cand = cand.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
+  if (els.woolMil.value) cand = cand.filter(r => normU(r["Poly Size MIL"]) === normU(els.woolMil.value));
+
+  return cand.length === 1 ? cand[0] : null;
+}
+
+function isWoolComplete(){
+  const base = resolveWoolBase();
+  const stack = resolveWoolStackFinal();
+  return !!(wb && base && stack && els.woolBacking.value && els.woolPoly.value && els.woolMil.value);
+}
+
+function recomputeWoolStack(){
+  const base = resolveWoolBase();
+  const candidates = stackCandidatesForBase();
+
+  const backs = [];
+  if (candidates.some(r => isTruthy(r["Loop"]))) backs.push("Loop");
+  if (candidates.some(r => isTruthy(r["Canvas"]))) backs.push("Canvas");
+  setSelectOptions(els.woolBacking, backs, "— Select Backing —", true);
+
+  let cand2 = candidates.slice();
+  if (els.woolBacking.value === "Loop") cand2 = cand2.filter(r => isTruthy(r["Loop"]));
+  if (els.woolBacking.value === "Canvas") cand2 = cand2.filter(r => isTruthy(r["Canvas"]));
+
+  const polys = uniqSorted(cand2, "Poly Type");
+  setSelectOptions(els.woolPoly, polys, "— Select Poly —", true);
+
+  let cand3 = cand2.slice();
+  if (els.woolPoly.value) cand3 = cand3.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
+
+  const mils = uniqSorted(cand3, "Poly Size MIL");
+  setSelectOptions(els.woolMil, mils, "— Select MIL —", true);
+
+  let cand4 = cand3.slice();
+  if (els.woolMil.value) cand4 = cand4.filter(r => normU(r["Poly Size MIL"]) === normU(els.woolMil.value));
+
+  const baseOut = base ? {
+    partNum: norm(base["Part Num"]),
+    finalOD: norm(base["Final OD"]),
+    napLength: norm(base["Nap Length"]),
+    opTuftedDia: norm(base["Op Tufted Pad Dia"]),
+    yarn: norm(base["Yarn"]),
+    substrateType: norm(base["Substrate Type"]),
+    substrateSize: norm(base["Substrate Size"])
+  } : null;
+
+  const stackOut = (cand4.length === 1) ? cand4[0] : null;
+
+  try {
+    const current = JSON.parse(els.debug.textContent || "{}");
+    current.wool = {
+      selections: {
+        padSize: els.woolPadSize.value || null,
+        nap: els.woolNap.value || null,
+        orientation: els.woolOrientation.value || null,
+        backing: els.woolBacking.value || null,
+        poly: els.woolPoly.value || null,
+        mil: els.woolMil.value || null,
+        print: els.woolPrint.value || null
+      },
+      resolvedBase: baseOut,
+      stackCandidateCount: cand4.length,
+      resolvedStack: stackOut ? {
+        polyType: norm(stackOut["Poly Type"]),
+        polyMil: norm(stackOut["Poly Size MIL"]),
+        polyDia: norm(stackOut["Poly Dia"]),
+        backingSize: norm(stackOut["Backing Size"])
+      } : null
+    };
+    showDebug(current);
+  } catch {}
+}
+
+function recomputeWoolAll(){
+  recomputeWoolNap();
+  recomputeWoolYarn();
+  recomputeWoolStack();
+}
+
+// Product type toggle
+let currentMode = "foam";
+function updateMode(){
+  const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
+  currentMode = type;
+  document.getElementById("foamCard").style.display = (type==="foam") ? "" : "none";
+  document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
+}
+
+function hnorm(s){
+  return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
+}
+function sheetToJsonByHeaders(ws, requiredHeaders){
+  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+  const req = requiredHeaders.map(hnorm);
+
+  let headerRowIdx = -1;
+  let headers = null;
+
+  for (let i=0; i<Math.min(50, aoa.length); i++){
+    const row = (aoa[i]||[]).map(hnorm).filter(Boolean);
+    if (!row.length) continue;
+    const ok = req.every(rh => row.includes(rh));
+    if (ok){
+      headerRowIdx = i;
+      headers = (aoa[i]||[]).map(v => String(v ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim());
+      break;
+    }
+  }
+
+  if (headerRowIdx === -1 || !headers){
+    return XLSX.utils.sheet_to_json(ws, { defval: "" });
+  }
+
+  const out=[];
+  for (let r=headerRowIdx+1; r<aoa.length; r++){
+    const row = aoa[r]||[];
+    const obj={};
+    for (let c=0; c<headers.length; c++){
+      const k=headers[c];
+      if (!k) continue;
+      obj[k]=row[c] ?? "";
+    }
+    if (Object.values(obj).some(v=>norm(v))) out.push(obj);
+  }
+  return out;
+}
+
+let THK_COLS = [];
+let THK_MAP = new Map();
+
+function buildThkMaps(){
+  THK_COLS = [];
+  THK_MAP = new Map();
+  if (!geoRows.length) return;
+
+  for (const k of Object.keys(geoRows[0])){
+    if (hnorm(k).startsWith("THK_")){
+      const col = k.trim();
+      THK_COLS.push(col);
+      const suffix = col.trim().slice(4);
+      const n = parseFloat(suffix);
+      if (Number.isFinite(n)) THK_MAP.set(n, col);
+    }
+  }
+  THK_COLS.sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function thkBucketCol(thkVal){
+  const t = toNum(thkVal);
+  if (t === null) return null;
+  if (t < 0.875) return THK_MAP.get(0.875) || "THK_0.875";
+  if (THK_MAP.has(t)) return THK_MAP.get(t);
+  for (const [n,col] of THK_MAP.entries()){
+    if (Math.abs(n - t) < 1e-9) return col;
+  }
+  return null;
+}
+
+function wheelsForThickness(thkVal){
+  const col = thkBucketCol(thkVal);
+  if (!col) return [];
+  const wheels = new Set();
+  for (const r of geoRows){
+    if (isTruthy(r[col])){
+      const w = norm(r[COL.geo_wheel]);
+      if (w) wheels.add(w);
+    }
+  }
+  return Array.from(wheels).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+}
+
+function foamRowsByColor(color){
+  const c = normU(color);
+  return foamRows.filter(r => normU(r[COL.foam_color]) === c);
+}
+function foamRowsByColorThickness(color, thickness){
+  const c = normU(color);
+  const t = toNum(thickness);
+  if (!c || t === null) return [];
+  return foamRows.filter(r => {
+    if (normU(r[COL.foam_color]) !== c) return false;
+    const rt = toNum(r[COL.foam_thickness]);
+    return rt !== null && Math.abs(rt - t) < 1e-9;
+  });
+}
+function geoRowsByWheel(wheel){
+  const w = normU(wheel);
+  return geoRows.filter(r => normU(r[COL.geo_wheel]) === w);
+}
+
+function resolveFoamRow(){
+  const color = els.foamColor.value;
+  const thk = els.foamThickness.value;
+  if (!color || !thk) return null;
+
+  const matches = foamRowsByColorThickness(color, thk);
+  if (matches.length === 1) return matches[0];
+
+  const pc = els.foamPartColor.value;
+  if (!pc) return null;
+
+  return matches.find(r => normU(r[COL.foam_partColor]) === normU(pc)) || null;
+}
+
+function recomputeFoam(){
+  const color = els.foamColor.value;
+
+  const thicknessOpts = color ? uniqSorted(foamRowsByColor(color), COL.foam_thickness) : [];
+  setSelectOptions(els.foamThickness, thicknessOpts, "— Select Thickness —", true);
+
+  const thk = els.foamThickness.value;
+  const matches = (color && thk) ? foamRowsByColorThickness(color, thk) : [];
+
+  if (matches.length > 1){
+    els.foamPartColorRow.classList.remove("hidden");
+    const pcs = Array.from(new Set(matches.map(r => norm(r[COL.foam_partColor])).filter(Boolean)))
+      .sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+    setSelectOptions(els.foamPartColor, pcs, "— Select Part Color —", true);
+  } else {
+    els.foamPartColorRow.classList.add("hidden");
+    els.foamPartColor.innerHTML = '<option value="">—</option>';
+    els.foamPartColor.value = "";
+  }
+
+  const wheelOpts = thk ? wheelsForThickness(thk) : uniqSorted(geoRows, COL.geo_wheel);
+  const prevWheel = els.foamWheel.value;
+  setSelectOptions(els.foamWheel, wheelOpts, "— Select Wheel —", true);
+  if (prevWheel && !wheelOpts.some(w => normU(w) === normU(prevWheel))){
+    els.foamWheel.value = "";
+  }
+
+  const padOpts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
+  const padUnique = Array.from(new Set(padOpts)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
+  setSelectOptions(els.foamPadSize, padUnique, "— Select Pad Size —", true);
+
+  updateDebugAndButtons();
+}
+
+function updateDebugAndButtons(){
+  const foamResolved = resolveFoamRow();
+  const wheel = els.foamWheel.value;
+  const pad = els.foamPadSize.value;
+
+  let grindDia = null;
+  if (wheel && pad){
+    const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
+    grindDia = row ? norm(row[COL.geo_grindDia]) : null;
+  }
+
+  const out = {
+    sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length },
+    selections: {
+      color: els.foamColor.value,
+      thickness: els.foamThickness.value,
+      partColor: els.foamPartColor.value || null,
+      wheel: wheel || null,
+      padSize: pad || null,
+      qty: els.foamQty.value,
+      loopType: els.foamLoopType.value || null,
+      finishedPad: els.foamHole.value || null
+    },
+    resolvedFoam: foamResolved ? {
+      part: norm(foamResolved[COL.foam_part]),
+      partColor: norm(foamResolved[COL.foam_partColor]),
+      firmness: norm(foamResolved[COL.foam_firmness])
+    } : null,
+    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null
+  };
+  showDebug(out);
+
+  const hasName = (norm(els.reqName.value) || norm(els.sampleName.value));
+  const foamComplete = !!(wb && foamResolved && wheel && pad);
+  const woolComplete = isWoolComplete();
+  const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
+  els.btnDownload.disabled = !canDownload;
+}
+
+/***********************
+ * SMART DATA LOADER FOR YOUR APP
+ * - Tries Excel silently; if it fails (COOP/CORS/permission), uses db/data.json
+ ***********************/
+function workbookToDb(wbIn){
+  const s1 = wbIn.Sheets[wbIn.SheetNames[0]];
+  const s2 = wbIn.Sheets[wbIn.SheetNames[1]];
+  const s3 = wbIn.Sheets[wbIn.SheetNames[2]];
+  const s4 = wbIn.Sheets[wbIn.SheetNames[3]];
+
+  const foam = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
+  const geo  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
+  const wool = XLSX.utils.sheet_to_json(s3, { defval: "" });
+  const stack = XLSX.utils.sheet_to_json(s4, { defval: "" });
+
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    foamRows: foam,
+    geoRows: geo,
+    woolRows: wool,
+    stackRows: stack
+  };
+}
+
+function applyDbToApp(db){
+  // Set globals used by your existing logic
+  wb = { loaded: true }; // truthy to satisfy "complete" checks
+
+  foamRows = Array.isArray(db.foamRows) ? db.foamRows : [];
+  geoRows  = Array.isArray(db.geoRows) ? db.geoRows : [];
+  woolRows = Array.isArray(db.woolRows) ? db.woolRows : [];
+  stackRows = Array.isArray(db.stackRows) ? db.stackRows : [];
+
+  buildThkMaps();
+  populateWoolPadSizes();
+
+  setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
+  setSelectOptions(els.foamThickness, [], "— Select Thickness —", false);
+  setSelectOptions(els.foamWheel, uniqSorted(geoRows, COL.geo_wheel), "— Select Wheel —", false);
+  setSelectOptions(els.foamPadSize, [], "— Select Pad Size —", false);
+
+  els.foamPartColorRow.classList.add("hidden");
+  els.foamPartColor.innerHTML = '<option value="">—</option>';
+
+  setInputsEnabled(true);
+  els.btnReset.disabled = false;
+
+  recomputeFoam();
+  updateDebugAndButtons();
+}
+
+async function loadAll(){
+  setStatus("Loading data…", null);
+
+  // Clear state
+  wb = null; foamRows = []; geoRows = []; woolRows = []; stackRows = [];
+  THK_COLS = []; THK_MAP = new Map();
+  setInputsEnabled(false);
+
+  // 1) Try Excel
+  try {
+    const wbExcel = await loadWorkbookFromSharePointAttempt();
+    const db = workbookToDb(wbExcel);
+
+    // OPTIONAL: keep JSON fresh for everyone when YOU load Excel
+    if (isAdminMode()) await pushDbUpdate(db);
+
+    applyDbToApp(db);
+    setStatus(`Loaded from EXCEL. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
+    return;
+  } catch (e) {
+    console.warn("Excel load failed; falling back to JSON.", e);
+  }
+
+  // Tenant gate for JSON fallback: only allow if we have a validated tenant login cached
+  if (!isTenantOk()) {
+    throw new Error("Sign-in required (tenant) to use JSON fallback.");
+  }
+
+  // 2) Fallback JSON
+  const db = await loadDbFromGitHub();
+  applyDbToApp(db);
+  setStatus(`Loaded from JSON fallback. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
+}
+
+function setInputsEnabled(on){
+  [
+    els.reqName, els.sampleName,
+    els.foamColor, els.foamThickness, els.foamWheel, els.foamPadSize,
+    els.foamQty, els.foamLoopType, els.foamHole, els.foamNotes,
+    els.woolPadSize, els.woolNap, els.woolYarn, els.woolOrientation, els.woolBacking, els.woolPoly, els.woolMil, els.woolPrint, els.woolNotes
+  ].forEach(el => { if (el) el.disabled = !on; });
+  els.foamPartColor.disabled = !on;
+}
+
+function safeFileName(str){
+  return String(str||"").replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim();
+}
+function buildFileName(){
+  const r = safeFileName(els.reqName.value);
+  const s = safeFileName(els.sampleName.value);
+  if (!r && !s) return "Sample.xlsx";
+  if (!r) return `${s}.xlsx`;
+  if (!s) return `${r}.xlsx`;
+  return `${r} - ${s}.xlsx`;
+}
+
+function exportTestBOM(){
+  if (currentMode==="wool") {
+    const base = resolveWoolBase();
+    const stack = resolveWoolStackFinal();
+    if (!base) return alert("Select a valid tufted pad (Final OD + Nap + Yarn).");
+    if (!stack) return alert("Select Backing + Poly Type + MIL (must resolve to one stack row).");
+
+    const aoa = [
+      ["Requested By", norm(els.reqName.value)],
+      ["Sample Name", norm(els.sampleName.value)],
+      ["Generated", new Date().toLocaleString()],
+      [],
+      ["Field","Value"],
+      ["Product Type", "Tufted Wool"],
+      ["Final OD", norm(els.woolPadSize.value)],
+      ["Nap Length", norm(els.woolNap.value)],
+      ["Yarn", norm(els.woolYarn.value)],
+      ["Orientation", norm(els.woolOrientation.value)],
+      ["Backing Type", norm(els.woolBacking.value)],
+      ["Poly Type", norm(els.woolPoly.value)],
+      ["MIL (Sturdyness)", norm(els.woolMil.value)],
+      ["Print", norm(els.woolPrint.value)],
+      [],
+      ["Base Part Num", norm(base["Part Num"])],
+      ["OP Tufted Pad Dia", norm(base["Op Tufted Pad Dia"])],
+      ["Substrate Type", norm(base["Substrate Type"])],
+      ["Substrate Size", norm(base["Substrate Size"])],
+      ["Yarn (from row)", norm(base["Yarn"])],
+      [],
+      ["Stack Poly Dia", norm(stack["Poly Dia"])],
+      ["Stack Backing Size", norm(stack["Backing Size"])],
+      ["Stack Poly Type", norm(stack["Poly Type"])],
+      ["Stack Poly MIL", norm(stack["Poly Size MIL"])],
+      ["Notes", norm(els.woolNotes?.value)]
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+    const wbOut = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+    XLSX.writeFile(wbOut, buildFileName());
+    return;
+  }
+
+  const foamResolved = resolveFoamRow();
+  if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
+
+  const wheel = els.foamWheel.value;
+  const pad = els.foamPadSize.value;
+  if (!wheel || !pad) return alert("Select Wheel + Pad Size.");
+
+  const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
+
+  let grindDia = "";
+  const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
+  if (row) grindDia = norm(row[COL.geo_grindDia]);
+
+  const aoa = [
+    ["Requested By", norm(els.reqName.value)],
+    ["Sample Name", norm(els.sampleName.value)],
+    ["Generated", new Date().toLocaleString()],
+    [],
+    ["Field","Value"],
+    ["Foam Part", norm(foamResolved[COL.foam_part])],
+    ["Foam Part Color", norm(foamResolved[COL.foam_partColor])],
+    ["Foam Color", norm(els.foamColor.value)],
+    ["Foam Thickness", norm(els.foamThickness.value)],
+    ["Foam Firmness", norm(foamResolved[COL.foam_firmness])],
+    ["Wheel", wheel],
+    ["Pad Size", pad],
+    ["Grinded Loop Dia", grindDia],
+    ["Qty", qty],
+    ["Loop Type", norm(els.foamLoopType.value)],
+    ["Finished Pad", norm(els.foamHole.value)],
+    ["Notes", norm(els.foamNotes.value)],
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+
+  const wbOut = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+  XLSX.writeFile(wbOut, buildFileName());
+}
+
+els.btnLoad.addEventListener("click", async ()=>{
+  try {
+    // Require tenant sign-in before allowing ANY load (even JSON fallback)
+    const ok = await ensureSignedInForTenant();
+    if (!ok) {
+      setStatus("Sign-in required.", false);
+      setInputsEnabled(false);
+      requireLoginRedirect();
+      return;
+    }
+    await loadAll();
+  } catch (e){
+    setStatus(String(e), false);
+    showDebug(String(e));
+    setInputsEnabled(false);
+  }
+});
+
+els.btnReset.addEventListener("click", ()=>{
+  els.reqName.value="";
+  els.sampleName.value="";
+  els.foamColor.value="";
+  els.foamThickness.value="";
+  els.foamPartColor.value="";
+  els.foamWheel.value="";
+  els.foamPadSize.value="";
+  els.foamQty.value="1";
+  els.foamLoopType.value="";
+  els.foamHole.value="";
+  els.foamNotes.value="";
+  if (els.woolPadSize) els.woolPadSize.value="";
+  if (els.woolNap) els.woolNap.value="";
+  if (els.woolYarn) els.woolYarn.value="";
+  if (els.woolOrientation) els.woolOrientation.value="";
+  if (els.woolBacking) els.woolBacking.value="";
+  if (els.woolPoly) els.woolPoly.value="";
+  if (els.woolMil) els.woolMil.value="";
+  if (els.woolPrint) els.woolPrint.value="";
+  if (els.woolNotes) els.woolNotes.value="";
+  els.foamPartColorRow.classList.add("hidden");
+  recomputeFoam();
+  if (typeof recomputeWoolAll === "function") recomputeWoolAll();
+});
+
+els.btnDownload.addEventListener("click", exportTestBOM);
+
+els.reqName.addEventListener("input", updateDebugAndButtons);
+els.sampleName.addEventListener("input", updateDebugAndButtons);
+
+els.foamColor.addEventListener("change", recomputeFoam);
+els.foamThickness.addEventListener("change", recomputeFoam);
+els.foamPartColor.addEventListener("change", recomputeFoam);
+els.foamWheel.addEventListener("change", recomputeFoam);
+els.foamPadSize.addEventListener("change", recomputeFoam);
+els.foamQty.addEventListener("input", updateDebugAndButtons);
+els.foamLoopType.addEventListener("change", updateDebugAndButtons);
+els.foamHole.addEventListener("change", updateDebugAndButtons);
+els.foamNotes.addEventListener("input", updateDebugAndButtons);
+if (els.woolNotes) els.woolNotes.addEventListener("input", updateDebugAndButtons);
+
+if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolYarn) els.woolYarn.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolBacking) els.woolBacking.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolPoly) els.woolPoly.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolMil) els.woolMil.addEventListener("change", ()=>{ recomputeWoolAll(); });
+if (els.woolOrientation) els.woolOrientation.addEventListener("change", ()=>{ updateDebugAndButtons(); });
+if (els.woolPrint) els.woolPrint.addEventListener("change", ()=>{ updateDebugAndButtons(); });
+
+document.querySelectorAll('input[name="prodType"]').forEach(r => r.addEventListener("change", ()=>{ updateMode(); updateDebugAndButtons(); }));
+
+(function init(){
+  setStatus("Not loaded", null);
+  showDebug("—");
+  setSelectOptions(els.foamColor, [], "Load data first", false);
+  setSelectOptions(els.foamThickness, [], "Load data first", false);
+  setSelectOptions(els.foamWheel, [], "Load data first", false);
+  setSelectOptions(els.foamPadSize, [], "Load data first", false);
+  els.foamPartColorRow.classList.add("hidden");
+  if (els.woolPadSize) setSelectOptions(els.woolPadSize, [], "Load data first", false);
+  if (els.woolNap) setSelectOptions(els.woolNap, [], "Load data first", false);
+  if (els.woolYarn) setSelectOptions(els.woolYarn, [], "Load data first", false);
+  if (els.woolBacking) setSelectOptions(els.woolBacking, [], "Load data first", false);
+  if (els.woolPoly) setSelectOptions(els.woolPoly, [], "Load data first", false);
+  if (els.woolMil) setSelectOptions(els.woolMil, [], "Load data first", false);
+  setInputsEnabled(false);
+  updateMode();
+})();
+</script>
+  </div>
+</body>
+</html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LCM Sample Configurator</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+
+  
+  <style>
+    :root{
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #0f172a;
+      --muted: #475569;
+      --line: #d6dee9;
+      --accent: #1d4ed8;       /* blue */
+      --accent-2: #2563eb;     /* hover */
+      --accent-soft: rgba(29,78,216,.10);
+      --danger: #b91c1c;
+      --ok: #15803d;
+      --radius: 10px;
+      --radius-sm: 8px;
+      --shadow: 0 10px 25px rgba(15, 23, 42, .08);
+      --shadow-sm: 0 6px 14px rgba(15, 23, 42, .06);
+      --focus: 0 0 0 3px rgba(29,78,216,.18);
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    *{ box-sizing: border-box; }
+    html, body{ height: 100%; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.35;
+    }
+
+    .wrap{
+      max-width: 1040px;
+      margin: 0 auto;
+      padding: 18px 16px 32px;
+    }
+
+    header.appbar{
+      display:flex;
+      align-items:flex-end;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+      margin: 14px 0 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+      box-shadow: var(--shadow-sm);
+    }
+    header.appbar h2{
+      margin:0;
+      font-size: 18px;
+      letter-spacing: .2px;
+    }
+    .sub{
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .card{
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin: 14px 0;
+      background: var(--card);
+      box-shadow: var(--shadow-sm);
+    }
+
+    h3{
+      margin: 0 0 12px;
+      font-size: 14px;
+      letter-spacing: .25px;
+      text-transform: uppercase;
+      color: #0b1220;
+    }
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    @media (max-width: 860px){
+      .grid{ grid-template-columns:1fr; }
+      header.appbar{ align-items:flex-start; flex-direction: column; }
+    }
+
+    label{
+      font-weight: 650;
+      display:block;
+      margin-bottom: 6px;
+      color: #0b1220;
+      font-size: 13px;
+    }
+
+    input, select, textarea{
+      width: 100%;
+      padding: 10px 11px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--line);
+      background: #ffffff;
+      font-size: 14px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+    textarea{ min-height: 86px; resize: vertical; }
+
+    input:focus, select:focus, textarea:focus{
+      border-color: rgba(29,78,216,.55);
+      box-shadow: var(--focus);
+    }
+    input:disabled, select:disabled, textarea:disabled{
+      background: #f1f5f9;
+      color: #64748b;
+      cursor:not-allowed;
+    }
+
+    button{
+      border: 1px solid var(--line);
+      background: #ffffff;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 650;
+      cursor: pointer;
+      transition: transform .05s ease, box-shadow .12s ease, background .12s ease, border-color .12s ease;
+    }
+    button:active{ transform: translateY(1px); }
+    button:hover{ box-shadow: var(--shadow-sm); }
+    button:disabled{ opacity:.55; cursor:not-allowed; box-shadow:none; }
+
+    .btn-primary{
+      border-color: rgba(29,78,216,.35);
+      background: var(--accent);
+      color: #ffffff;
+    }
+    .btn-primary:hover{ background: var(--accent-2); border-color: rgba(29,78,216,.55); }
+    .btn-ghost{
+      background: transparent;
+      border-color: var(--line);
+    }
+
+    .row{ margin: 10px 0; }
+    .inline{
+      display:flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      color: var(--muted);
+      background: #fff;
+    }
+    .pill.ok{ color: var(--ok); border-color: rgba(21,128,61,.35); background: rgba(21,128,61,.06); }
+    .pill.bad{ color: var(--danger); border-color: rgba(185,28,28,.35); background: rgba(185,28,28,.06); }
+
+    pre{
+      display:none;
+      background: #0b1220;
+      color: #e2e8f0;
+      padding: 12px;
+      border-radius: var(--radius);
+      overflow:auto;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.06);
+    }
+
+    .hidden{ display:none !important; }
+
+    /* Segmented control for product type */
+    .seg{
+      display:inline-flex;
+      padding: 4px;
+      border:1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: inset 0 0 0 1px rgba(15,23,42,.02);
+    }
+    .seg input{ display:none; }
+    .seg label{
+      margin: 0;
+      padding: 8px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 750;
+      color: var(--muted);
+      cursor:pointer;
+      user-select:none;
+    }
+    .seg input:checked + label{
+      color: var(--accent);
+      background: var(--accent-soft);
+      box-shadow: inset 0 0 0 1px rgba(29,78,216,.18);
+    }
+
+    .section-note{
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+
+    .divider{
+      height:1px;
+      background: var(--line);
+      margin: 12px 0;
+    }
+  </style>
+
+</head>
+
+<body>
+  <div class="wrap">
+  <h2>LCM Sample Configurator</h2>
+  <div class="muted">
+    Enter in your requested part, and this will cross refrence with BOM items. 
+  </div>
+
+  <div class="card">
+    <div class="inline">
+      <button id="btnLoad" class="btn-primary">Load XLSX from OneDrive</button>
+      <span id="status" class="pill">Not loaded</span>
+      <button id="btnReset" class="btn-ghost" disabled>Reset</button>
+    </div>
+
+    <div class="grid" style="margin-top:12px;">
+      <div class="row">
+        <label for="reqName">Requested By</label>
+        <input id="reqName" placeholder="e.g., Chace Garcia">
+      </div>
+      <div class="row">
+        <label for="sampleName">Sample Name</label>
+        <input id="sampleName" placeholder="e.g., Red 1.25 FR test">
+      </div>
+    </div>
+  </div>
+
+
+  <div class="card" id="typeCard">
+    <h3 style="margin:0 0 10px;">Product Type</h3>
+    <div class="seg" role="tablist" aria-label="Product Type">
+  <input id="ptFoam" type="radio" name="prodType" value="foam" checked>
+  <label for="ptFoam">Foam Pad</label>
+  <input id="ptWool" type="radio" name="prodType" value="wool">
+  <label for="ptWool">Tufted Wool Pad</label>
+</div>
+  </div>
+
+
+  <div class="card" id="foamCard">
+    <h3 style="margin:0 0 10px;">Foam Selection</h3>
+
+    <div class="grid">
+      <div class="row">
+        <label for="foamColor">Color</label>
+        <select id="foamColor" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamThickness">Thickness</label>
+        <select id="foamThickness" disabled></select>
+      </div>
+
+      <div class="row hidden" id="foamPartColorRow">
+        <label for="foamPartColor">Part Color (name)</label>
+        <select id="foamPartColor"></select>
+      </div>
+
+      <div class="row">
+        <label for="foamWheel">Wheel</label>
+        <select id="foamWheel" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamPadSize">Pad Size</label>
+        <select id="foamPadSize" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="foamQty">Qty</label>
+        <input id="foamQty" type="number" min="1" step="1" value="1" disabled>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="row">
+        <label for="foamLoopType">Loop Type</label>
+        <select id="foamLoopType" disabled>
+          <option value="">— Select —</option>
+          <option>White Loop</option>
+          <option>Black Loop</option>
+          <option>No Loop</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="foamHole">Finished Pad</label>
+        <select id="foamHole" disabled>
+          <option value="">— Select —</option>
+          <option>With Hole</option>
+          <option>No Hole</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="foamNotes">Notes</label>
+      <textarea id="foamNotes" disabled placeholder="Date needed and other important information."></textarea>
+    </div>
+  </div>
+
+
+  <div class="card" id="woolCard" style="display:none;">
+    <h3 style="margin:0 0 10px;">Tufted Wool Selection</h3>
+
+    <div class="grid">
+      <div class="row">
+        <label for="woolPadSize">Final Pad Size (Final OD)</label>
+        <select id="woolPadSize" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="woolNap">Nap Length</label>
+        <select id="woolNap" disabled></select>
+      </div>
+      <div class="row">
+        <label for="woolYarn">Yarn</label>
+        <select id="woolYarn" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="woolOrientation">Orientation</label>
+        <select id="woolOrientation" disabled>
+          <option value="">— Select —</option>
+          <option>Curved</option>
+          <option>Flat</option>
+        </select>
+      </div>
+
+      <div class="row">
+        <label for="woolBacking">Backing Type</label>
+        <select id="woolBacking" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="woolPoly">Poly Type</label>
+        <select id="woolPoly" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="woolMil">Sturdyness (MIL)</label>
+        <select id="woolMil" disabled></select>
+      </div>
+
+      <div class="row">
+        <label for="woolPrint">Print</label>
+        <select id="woolPrint" disabled>
+          <option value="">— Select —</option>
+          <option>No Print</option>
+          <option>LC Print</option>
+          <option>Customer Sample Print</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <label for="woolNotes">Notes</label>
+      <textarea id="woolNotes" disabled placeholder="Date needed and other important information."></textarea>
+    </div>
+  </div>
+
+
+  <div class="card">
+    <div class="inline">
+      <button id="btnDownload" class="btn-primary" disabled>Download BOM (.xlsx)</button>
+    </div>
+    <!-- div class="muted" style="margin-top:8px;">
+      This is a simple test export (we'll refine rows/formatting after you confirm selections work).
+    </div>
+    <!-- h4 style="margin:12px 0 8px;">Debug</h4-->
+    <pre id="debug" visibility="hidden">—</pre>
+  </div>
+
+<script>
+/***********************
+ * CONFIG
+ ***********************/
+const SHARE_LINK =
+  "https://lakecman-my.sharepoint.com/:x:/g/personal/chace_garcia_lakecountrymfg_com/IQCfb3FNd-XeTbcO0TIOiHySAZry8RhZAI3YWDblhGMUVGA";
+
+// Open with ?admin=1 if you want it to redirect-sign-in for you:
+// https://chacegarcia.github.io/Sample-Cross-Refrencer/?admin=1
+function isAdminMode() {
+  return new URLSearchParams(location.search).get("admin") === "1";
+}
+
+const FALLBACK_JSON_PATH = "./db/data.json";
+const WORKER_PUSH_URL = "https://db-updater.chacegarcia.workers.dev/";
+
+/***********************
+ * MSAL / AUTH (Excel path)
+ ***********************/
+const msalInstance = new msal.PublicClientApplication({
+  auth: {
+    clientId: "f09a19dd-0056-40c6-8af0-4a1bc6504f8b",
+    authority: "https://login.microsoftonline.com/05281171-4b56-433b-95a7-ae79c44929d3",
+    redirectUri: "https://chacegarcia.github.io/Sample-Cross-Refrencer/"
+  },
+  cache: { cacheLocation: "localStorage" }
+});
+
 let lastIdToken = null;
 msalInstance.handleRedirectPromise().then((res) => {
   if (res?.idToken) lastIdToken = res.idToken;
