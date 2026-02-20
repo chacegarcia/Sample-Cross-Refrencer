@@ -24,7 +24,6 @@
       --ok: #15803d;
       --radius: 10px;
       --radius-sm: 8px;
-      --shadow: 0 10px 25px rgba(15, 23, 42, .08);
       --shadow-sm: 0 6px 14px rgba(15, 23, 42, .06);
       --focus: 0 0 0 3px rgba(29,78,216,.18);
       --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -45,6 +44,8 @@
       margin: 0 auto;
       padding: 18px 16px 32px;
     }
+
+    .muted{ color: var(--muted); }
 
     .card{
       border:1px solid var(--line);
@@ -382,31 +383,22 @@ const msalInstance = new msal.PublicClientApplication({
   cache: { cacheLocation: "localStorage" }
 });
 
-const loginRequest = {
-  scopes: ["openid", "profile", "email", "Files.Read"]
-};
-
+const loginRequest = { scopes: ["openid", "profile", "email", "Files.Read"] };
 let lastIdToken = null;
 
 function getAccount() {
   return msalInstance.getActiveAccount() || msalInstance.getAllAccounts()[0] || null;
 }
-
-function tenantFromAccount(acct) {
-  return acct?.idTokenClaims?.tid || null;
-}
-
+function tenantFromAccount(acct) { return acct?.idTokenClaims?.tid || null; }
 function isTenantOk() {
   const acct = getAccount();
   const tid = tenantFromAccount(acct);
   return !!(acct && tid && tid === TENANT_ID);
 }
-
 function requireLoginRedirect() {
   sessionStorage.setItem("afterLoginDoLoad", "1");
   msalInstance.loginRedirect(loginRequest);
 }
-
 function requireTenantOrRedirect() {
   if (isTenantOk()) return true;
   setStatus("Sign-in required.", false);
@@ -418,9 +410,7 @@ function requireTenantOrRedirect() {
 async function acquireIdTokenForPushIfPossible() {
   const account = getAccount();
   if (!account) return null;
-
   msalInstance.setActiveAccount(account);
-
   try {
     const token = await msalInstance.acquireTokenSilent({
       scopes: ["openid", "profile", "email"],
@@ -478,9 +468,7 @@ async function acquireIdTokenForPushIfPossible() {
 async function getAccessTokenSilentOnly() {
   const account = getAccount();
   if (!account) return null;
-
   msalInstance.setActiveAccount(account);
-
   try {
     const token = await msalInstance.acquireTokenSilent({ ...loginRequest, account });
     return token.accessToken;
@@ -497,6 +485,41 @@ function base64UrlEncode(str) {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+/***********************
+ * XLSX DOWNLOAD (FIXES iOS + corporate browsers)
+ ***********************/
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function buildXlsxBlob(workbook){
+  const out = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  return new Blob([out], { type: XLSX_MIME });
+}
+
+async function downloadXlsx(workbook, filename){
+  const blob = buildXlsxBlob(workbook);
+
+  // iOS / mobile share sheet (best experience)
+  try {
+    const file = new File([blob], filename, { type: XLSX_MIME });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+      return true;
+    }
+  } catch { /* ignore */ }
+
+  // standard download fallback
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+  return true;
 }
 
 /***********************
@@ -540,9 +563,7 @@ async function loadDbFromGitHub() {
  * PUSH JSON (admin only)
  ***********************/
 async function pushDbUpdate(dbObject) {
-  if (!lastIdToken) {
-    lastIdToken = await acquireIdTokenForPushIfPossible();
-  }
+  if (!lastIdToken) lastIdToken = await acquireIdTokenForPushIfPossible();
   if (!lastIdToken) throw new Error("Not signed in (no id token).");
 
   const res = await fetch(WORKER_PUSH_URL, {
@@ -670,7 +691,6 @@ function splitMaybeComma(v){
   return s.split(",").map(x=>x.trim()).filter(Boolean);
 }
 
-/* ===== Tufted Wool ===== */
 function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
 
 function populateWoolPadSizes(){
@@ -712,8 +732,8 @@ function resolveWoolDia(){
   if (dias.length === 1) return dias[0];
   const yarn = els.woolYarn.value;
   if (yarn){
-    const r = rows.find(x => normU(x["Yarn"])===normU(yarn));
-    return r ? norm(r["Op Tufted Pad Dia"]) : null;
+    const rr = rows.find(x => normU(x["Yarn"])===normU(yarn));
+    return rr ? norm(rr["Op Tufted Pad Dia"]) : null;
   }
   return null;
 }
@@ -781,19 +801,18 @@ function recomputeWoolAll(){
   recomputeWoolNap();
   recomputeWoolYarn();
   recomputeWoolStack();
-  updateDebugAndButtons(); // IMPORTANT: enables download button in wool/json path
+  updateDebugAndButtons();
 }
 
-/* ===== Mode ===== */
 let currentMode = "foam";
 function updateMode(){
   const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
   currentMode = type;
   document.getElementById("foamCard").style.display = (type==="foam") ? "" : "none";
   document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
+  updateDebugAndButtons();
 }
 
-/* ===== Excel sheet parsing helpers ===== */
 function hnorm(s){
   return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
 }
@@ -959,23 +978,27 @@ function updateDebugAndButtons(){
     sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length, woolRows: woolRows.length, stackRows: stackRows.length },
     selections: {
       productType: currentMode,
-      color: els.foamColor.value || null,
-      thickness: els.foamThickness.value || null,
-      partColor: els.foamPartColor.value || null,
-      wheel: wheel || null,
-      padSize: pad || null,
-      qty: els.foamQty.value,
-      loopType: els.foamLoopType.value || null,
-      finishedPad: els.foamHole.value || null,
+      requestedBy: els.reqName.value,
+      sampleName: els.sampleName.value,
+      foam: {
+        color: els.foamColor.value,
+        thickness: els.foamThickness.value,
+        partColor: els.foamPartColor.value || null,
+        wheel: wheel || null,
+        padSize: pad || null,
+        qty: els.foamQty.value,
+        loopType: els.foamLoopType.value || null,
+        finishedPad: els.foamHole.value || null
+      },
       wool: {
         padSize: els.woolPadSize?.value || null,
         nap: els.woolNap?.value || null,
         yarn: els.woolYarn?.value || null,
+        orientation: els.woolOrientation?.value || null,
         backing: els.woolBacking?.value || null,
         poly: els.woolPoly?.value || null,
         mil: els.woolMil?.value || null,
-        orientation: els.woolOrientation?.value || null,
-        print: els.woolPrint?.value || null,
+        print: els.woolPrint?.value || null
       }
     },
     resolvedFoam: foamResolved ? {
@@ -983,20 +1006,14 @@ function updateDebugAndButtons(){
       partColor: norm(foamResolved[COL.foam_partColor]),
       firmness: norm(foamResolved[COL.foam_firmness])
     } : null,
-    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null,
-    resolvedWoolBase: resolveWoolBase() ? { partNum: norm(resolveWoolBase()["Part Num"] || "") } : null,
-    resolvedWoolStack: resolveWoolStackFinal() ? { polyType: norm(resolveWoolStackFinal()["Poly Type"] || "") } : null
+    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null
   };
   showDebug(out);
 
   const hasName = (norm(els.reqName.value) || norm(els.sampleName.value));
   const foamComplete = !!(wb && foamResolved && wheel && pad);
   const woolComplete = isWoolComplete();
-
-  const canDownload =
-    hasName &&
-    ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
-
+  const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
   els.btnDownload.disabled = !canDownload;
 }
 
@@ -1047,11 +1064,12 @@ function applyDbToApp(db){
   els.btnReset.disabled = false;
 
   recomputeFoam();
-  recomputeWoolAll(); // keeps wool in sync too
+  recomputeWoolAll();
   updateDebugAndButtons();
 }
 
 async function loadAll(){
+  // HARD GATE: do not load Excel or JSON unless tenant validated
   if (!isTenantOk()) throw new Error("Sign-in required (tenant).");
 
   setStatus("Loading data…", null);
@@ -1092,14 +1110,8 @@ function setInputsEnabled(on){
   els.foamPartColor.disabled = !on;
 }
 
-/***********************
- * EXPORT (RESTORED)
- ***********************/
 function safeFileName(str){
-  return String(str||"")
-    .replace(/[\\/:*?"<>|]/g,"")
-    .replace(/\s+/g," ")
-    .trim();
+  return String(str||"").replace(/[\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim();
 }
 function buildFileName(){
   const r = safeFileName(els.reqName.value);
@@ -1110,12 +1122,15 @@ function buildFileName(){
   return `${r} - ${s}.xlsx`;
 }
 
-function exportTestBOM(){
-  // ---- Wool ----
+/***********************
+ * EXPORT BOM (FIXED DOWNLOAD)
+ ***********************/
+async function exportTestBOM(){
+  const filename = buildFileName();
+
   if (currentMode==="wool") {
     const base = resolveWoolBase();
     const stack = resolveWoolStackFinal();
-
     if (!base) return alert("Select a valid tufted pad (Final OD + Nap + Yarn).");
     if (!stack) return alert("Select Backing + Poly Type + MIL (must resolve to one stack row).");
 
@@ -1139,6 +1154,7 @@ function exportTestBOM(){
       ["OP Tufted Pad Dia", norm(base["Op Tufted Pad Dia"])],
       ["Substrate Type", norm(base["Substrate Type"])],
       ["Substrate Size", norm(base["Substrate Size"])],
+      ["Yarn (from row)", norm(base["Yarn"])],
       [],
       ["Stack Poly Dia", norm(stack["Poly Dia"])],
       ["Stack Backing Size", norm(stack["Backing Size"])],
@@ -1150,12 +1166,12 @@ function exportTestBOM(){
     const ws = XLSX.utils.aoa_to_sheet(aoa);
     ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
     const wbOut = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wbOut, ws, "BOM");
-    XLSX.writeFile(wbOut, buildFileName());
+    XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+
+    await downloadXlsx(wbOut, filename);
     return;
   }
 
-  // ---- Foam ----
   const foamResolved = resolveFoamRow();
   if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
 
@@ -1166,10 +1182,7 @@ function exportTestBOM(){
   const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
 
   let grindDia = "";
-  const row = geoRows.find(r =>
-    normU(r[COL.geo_wheel])===normU(wheel) &&
-    splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad))
-  );
+  const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
   if (row) grindDia = norm(row[COL.geo_grindDia]);
 
   const aoa = [
@@ -1178,7 +1191,6 @@ function exportTestBOM(){
     ["Generated", new Date().toLocaleString()],
     [],
     ["Field","Value"],
-    ["Product Type", "Foam"],
     ["Foam Part", norm(foamResolved[COL.foam_part])],
     ["Foam Part Color", norm(foamResolved[COL.foam_partColor])],
     ["Foam Color", norm(els.foamColor.value)],
@@ -1195,9 +1207,11 @@ function exportTestBOM(){
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+
   const wbOut = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wbOut, ws, "BOM");
-  XLSX.writeFile(wbOut, buildFileName());
+  XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
+
+  await downloadXlsx(wbOut, filename);
 }
 
 /***********************
@@ -1205,6 +1219,7 @@ function exportTestBOM(){
  ***********************/
 els.btnLoad.addEventListener("click", async ()=>{
   try {
+    // Gate everything behind tenant sign-in
     if (!requireTenantOrRedirect()) return;
     await loadAll();
   } catch (e){
@@ -1241,7 +1256,7 @@ els.btnReset.addEventListener("click", ()=>{
   updateDebugAndButtons();
 });
 
-// IMPORTANT: restore export click handler
+// ✅ THIS WAS MISSING IN YOUR PASTED VERSION
 els.btnDownload.addEventListener("click", exportTestBOM);
 
 els.reqName.addEventListener("input", updateDebugAndButtons);
@@ -1257,17 +1272,14 @@ els.foamLoopType.addEventListener("change", updateDebugAndButtons);
 els.foamHole.addEventListener("change", updateDebugAndButtons);
 els.foamNotes.addEventListener("input", updateDebugAndButtons);
 
-// make sure wool actions can enable export
-if (els.woolNotes) els.woolNotes.addEventListener("input", updateDebugAndButtons);
-
-if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolYarn) els.woolYarn.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolBacking) els.woolBacking.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolPoly) els.woolPoly.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolMil) els.woolMil.addEventListener("change", ()=>{ recomputeWoolAll(); });
-if (els.woolOrientation) els.woolOrientation.addEventListener("change", ()=>{ updateDebugAndButtons(); });
-if (els.woolPrint) els.woolPrint.addEventListener("change", ()=>{ updateDebugAndButtons(); });
+if (els.woolPadSize) els.woolPadSize.addEventListener("change", recomputeWoolAll);
+if (els.woolNap) els.woolNap.addEventListener("change", recomputeWoolAll);
+if (els.woolYarn) els.woolYarn.addEventListener("change", recomputeWoolAll);
+if (els.woolBacking) els.woolBacking.addEventListener("change", recomputeWoolAll);
+if (els.woolPoly) els.woolPoly.addEventListener("change", recomputeWoolAll);
+if (els.woolMil) els.woolMil.addEventListener("change", recomputeWoolAll);
+if (els.woolOrientation) els.woolOrientation.addEventListener("change", updateDebugAndButtons);
+if (els.woolPrint) els.woolPrint.addEventListener("change", updateDebugAndButtons);
 
 document.querySelectorAll('input[name="prodType"]').forEach(r =>
   r.addEventListener("change", ()=>{ updateMode(); updateDebugAndButtons(); })
@@ -1281,12 +1293,14 @@ document.querySelectorAll('input[name="prodType"]').forEach(r =>
   setSelectOptions(els.foamWheel, [], "Load data first", false);
   setSelectOptions(els.foamPadSize, [], "Load data first", false);
   els.foamPartColorRow.classList.add("hidden");
+
   if (els.woolPadSize) setSelectOptions(els.woolPadSize, [], "Load data first", false);
   if (els.woolNap) setSelectOptions(els.woolNap, [], "Load data first", false);
   if (els.woolYarn) setSelectOptions(els.woolYarn, [], "Load data first", false);
   if (els.woolBacking) setSelectOptions(els.woolBacking, [], "Load data first", false);
   if (els.woolPoly) setSelectOptions(els.woolPoly, [], "Load data first", false);
   if (els.woolMil) setSelectOptions(els.woolMil, [], "Load data first", false);
+
   setInputsEnabled(false);
   updateMode();
 })();
