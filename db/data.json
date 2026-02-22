@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-02-19T06:00:10.470Z",
+  "updatedAt": "2026-02-22T04:06:56.964Z",
   "foamRows": [
     {
       "Color": "BLACK",
@@ -1661,6 +1661,16 @@
       "Loop": "Y",
       "Canvas": "",
       "Poly Part": "15MIL-CLEAR-POLY-3.5-SUB",
+      "__EMPTY": ""
+    },
+    {
+      "Poly Size MIL": 15,
+      "Poly Type": "clear",
+      "Poly Dia": 4.75,
+      "Backing Size": 4.25,
+      "Loop": "",
+      "Canvas": "Y",
+      "Poly Part": "15MIL-CLEAR-POLY-4.75-SUB",
       "__EMPTY": ""
     }
   ]
