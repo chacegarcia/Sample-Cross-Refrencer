@@ -190,6 +190,16 @@
       background: var(--accent-soft);
       box-shadow: inset 0 0 0 1px rgba(29,78,216,.18);
     }
+
+    /* ✅ Required-field highlighting */
+    .field-error{
+      border-color: rgba(185,28,28,.75) !important;
+      background: rgba(185,28,28,.06) !important;
+      box-shadow: 0 0 0 3px rgba(185,28,28,.12) !important;
+    }
+    .field-error-label{
+      color: #b91c1c !important;
+    }
   </style>
 </head>
 
@@ -653,6 +663,77 @@ function isTruthy(v){
   return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
 }
 
+/***********************
+ * ✅ REQUIRED-FIELD HIGHLIGHTING
+ ***********************/
+let didAttemptExport = false;
+
+function setFieldError(el, on){
+  if (!el || !el.classList) return;
+  el.classList.toggle("field-error", !!on);
+  const id = el.id;
+  if (!id) return;
+  const lab = document.querySelector(`label[for="${CSS.escape(id)}"]`);
+  if (lab) lab.classList.toggle("field-error-label", !!on);
+}
+
+function clearAllFieldErrors(){
+  document.querySelectorAll(".field-error").forEach(el => el.classList.remove("field-error"));
+  document.querySelectorAll(".field-error-label").forEach(el => el.classList.remove("field-error-label"));
+}
+
+function validateForDownload(){
+  const missing = [];
+
+  // Require: at least one of Requested By or Sample Name
+  const hasName = !!(norm(els.reqName.value) || norm(els.sampleName.value));
+  if (!hasName){
+    missing.push(els.reqName, els.sampleName);
+  }
+
+  // Must have loaded data
+  if (!wb){
+    // highlight load button if they try to export without loading
+    missing.push(els.btnLoad);
+  }
+
+  if (currentMode === "foam"){
+    if (!norm(els.foamColor.value)) missing.push(els.foamColor);
+    if (!norm(els.foamThickness.value)) missing.push(els.foamThickness);
+
+    const needsPartColor = !els.foamPartColorRow.classList.contains("hidden");
+    if (needsPartColor && !norm(els.foamPartColor.value)) missing.push(els.foamPartColor);
+
+    if (!norm(els.foamWheel.value)) missing.push(els.foamWheel);
+    if (!norm(els.foamPadSize.value)) missing.push(els.foamPadSize);
+  } else {
+    if (!norm(els.woolPadSize?.value)) missing.push(els.woolPadSize);
+    if (!norm(els.woolNap?.value)) missing.push(els.woolNap);
+    if (!norm(els.woolYarn?.value)) missing.push(els.woolYarn);
+    if (!norm(els.woolBacking?.value)) missing.push(els.woolBacking);
+    if (!norm(els.woolPoly?.value)) missing.push(els.woolPoly);
+    if (!norm(els.woolMil?.value)) missing.push(els.woolMil);
+  }
+
+  return { ok: missing.length === 0, missing: Array.from(new Set(missing.filter(Boolean))) };
+}
+
+function syncHighlights(scrollToFirst=false){
+  clearAllFieldErrors();
+  const v = validateForDownload();
+  if (!v.ok){
+    v.missing.forEach(el => setFieldError(el, true));
+    if (scrollToFirst){
+      const first = v.missing.find(el => el && el.scrollIntoView);
+      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+  return v;
+}
+
+/***********************
+ * UI HELPERS
+ ***********************/
 function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
   const prev = keepValue ? sel.value : "";
   sel.innerHTML = "";
@@ -1015,6 +1096,9 @@ function updateDebugAndButtons(){
   const woolComplete = isWoolComplete();
   const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
   els.btnDownload.disabled = !canDownload;
+
+  // ✅ After the first attempt, keep highlights updated live
+  if (didAttemptExport) syncHighlights(false);
 }
 
 /***********************
@@ -1123,9 +1207,17 @@ function buildFileName(){
 }
 
 /***********************
- * EXPORT BOM (FIXED DOWNLOAD)
+ * EXPORT BOM (FIXED DOWNLOAD + REQUIRED HIGHLIGHTS)
  ***********************/
 async function exportTestBOM(){
+  didAttemptExport = true;
+
+  const v = syncHighlights(true);
+  if (!v.ok){
+    alert("Please fill the highlighted fields before exporting.");
+    return;
+  }
+
   const filename = buildFileName();
 
   if (currentMode==="wool") {
@@ -1230,6 +1322,9 @@ els.btnLoad.addEventListener("click", async ()=>{
 });
 
 els.btnReset.addEventListener("click", ()=>{
+  didAttemptExport = false;
+  clearAllFieldErrors();
+
   els.reqName.value="";
   els.sampleName.value="";
   els.foamColor.value="";
@@ -1256,9 +1351,10 @@ els.btnReset.addEventListener("click", ()=>{
   updateDebugAndButtons();
 });
 
-// ✅ THIS WAS MISSING IN YOUR PASTED VERSION
+// Download button
 els.btnDownload.addEventListener("click", exportTestBOM);
 
+// Inputs
 els.reqName.addEventListener("input", updateDebugAndButtons);
 els.sampleName.addEventListener("input", updateDebugAndButtons);
 
@@ -1288,6 +1384,7 @@ document.querySelectorAll('input[name="prodType"]').forEach(r =>
 (function init(){
   setStatus("Not loaded", null);
   showDebug("—");
+
   setSelectOptions(els.foamColor, [], "Load data first", false);
   setSelectOptions(els.foamThickness, [], "Load data first", false);
   setSelectOptions(els.foamWheel, [], "Load data first", false);
