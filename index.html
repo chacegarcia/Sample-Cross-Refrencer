@@ -192,13 +192,13 @@
     }
 
     /* ✅ Required-field highlighting */
-    .field-error{
-      border-color: rgba(185,28,28,.75) !important;
-      background: rgba(185,28,28,.06) !important;
-      box-shadow: 0 0 0 3px rgba(185,28,28,.12) !important;
-    }
-    .field-error-label{
-      color: #b91c1c !important;
+    .row.missing label{ color: var(--danger); }
+    .row.missing input,
+    .row.missing select,
+    .row.missing textarea{
+      border-color: rgba(185,28,28,.65) !important;
+      box-shadow: 0 0 0 3px rgba(185,28,28,.18) !important;
+      background: rgba(185,28,28,.03) !important;
     }
   </style>
 </head>
@@ -216,11 +216,11 @@
       </div>
 
       <div class="grid" style="margin-top:12px;">
-        <div class="row">
+        <div class="row" id="rowReqName">
           <label for="reqName">Requested By</label>
           <input id="reqName" placeholder="e.g., Chace Garcia">
         </div>
-        <div class="row">
+        <div class="row" id="rowSampleName">
           <label for="sampleName">Sample Name</label>
           <input id="sampleName" placeholder="e.g., Red 1.25 FR test">
         </div>
@@ -241,12 +241,12 @@
       <h3 style="margin:0 0 10px;">Foam Selection</h3>
 
       <div class="grid">
-        <div class="row">
+        <div class="row" id="rowFoamColor">
           <label for="foamColor">Color</label>
           <select id="foamColor" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowFoamThickness">
           <label for="foamThickness">Thickness</label>
           <select id="foamThickness" disabled></select>
         </div>
@@ -256,24 +256,24 @@
           <select id="foamPartColor"></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowFoamWheel">
           <label for="foamWheel">Wheel</label>
           <select id="foamWheel" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowFoamPadSize">
           <label for="foamPadSize">Pad Size</label>
           <select id="foamPadSize" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowFoamQty">
           <label for="foamQty">Qty</label>
           <input id="foamQty" type="number" min="1" step="1" value="1" disabled>
         </div>
       </div>
 
       <div class="grid">
-        <div class="row">
+        <div class="row" id="rowFoamLoopType">
           <label for="foamLoopType">Loop Type</label>
           <select id="foamLoopType" disabled>
             <option value="">— Select —</option>
@@ -283,7 +283,7 @@
           </select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowFoamHole">
           <label for="foamHole">Finished Pad</label>
           <select id="foamHole" disabled>
             <option value="">— Select —</option>
@@ -303,17 +303,17 @@
       <h3 style="margin:0 0 10px;">Tufted Wool Selection</h3>
 
       <div class="grid">
-        <div class="row">
+        <div class="row" id="rowWoolPadSize">
           <label for="woolPadSize">Final Pad Size (Final OD)</label>
           <select id="woolPadSize" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowWoolNap">
           <label for="woolNap">Nap Length</label>
           <select id="woolNap" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowWoolYarn">
           <label for="woolYarn">Yarn</label>
           <select id="woolYarn" disabled></select>
         </div>
@@ -327,17 +327,17 @@
           </select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowWoolBacking">
           <label for="woolBacking">Backing Type</label>
           <select id="woolBacking" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowWoolPoly">
           <label for="woolPoly">Poly Type</label>
           <select id="woolPoly" disabled></select>
         </div>
 
-        <div class="row">
+        <div class="row" id="rowWoolMil">
           <label for="woolMil">Sturdyness (MIL)</label>
           <select id="woolMil" disabled></select>
         </div>
@@ -361,7 +361,8 @@
 
     <div class="card">
       <div class="inline">
-        <button id="btnDownload" class="btn-primary">Download BOM (.xlsx)</button>
+        <!-- ✅ Only disabled until data is loaded. Export click handles validation -->
+        <button id="btnDownload" class="btn-primary" disabled>Download BOM (.xlsx)</button>
       </div>
       <pre id="debug" visibility="hidden">—</pre>
     </div>
@@ -432,7 +433,6 @@ async function acquireIdTokenForPushIfPossible() {
   }
 }
 
-// One clean MSAL bootstrap (NO duplicate handleRedirectPromise)
 (async () => {
   try {
     const res = await msalInstance.handleRedirectPromise();
@@ -445,7 +445,6 @@ async function acquireIdTokenForPushIfPossible() {
       if (acct) msalInstance.setActiveAccount(acct);
     }
 
-    // If we returned from login and wanted auto-load
     if (sessionStorage.getItem("afterLoginDoLoad") === "1") {
       sessionStorage.removeItem("afterLoginDoLoad");
 
@@ -462,7 +461,6 @@ async function acquireIdTokenForPushIfPossible() {
       }
     }
 
-    // If admin page opened and user not signed in, force login
     if (isAdminMode() && !getAccount()) {
       requireLoginRedirect();
     }
@@ -472,9 +470,6 @@ async function acquireIdTokenForPushIfPossible() {
   }
 })();
 
-/**
- * Silent-only access token for Graph download
- */
 async function getAccessTokenSilentOnly() {
   const account = getAccount();
   if (!account) return null;
@@ -498,7 +493,7 @@ function base64UrlEncode(str) {
 }
 
 /***********************
- * XLSX DOWNLOAD (FIXES iOS + corporate browsers)
+ * XLSX DOWNLOAD (iOS/mobile-friendly)
  ***********************/
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -510,16 +505,14 @@ function buildXlsxBlob(workbook){
 async function downloadXlsx(workbook, filename){
   const blob = buildXlsxBlob(workbook);
 
-  // iOS / mobile share sheet (best experience)
   try {
     const file = new File([blob], filename, { type: XLSX_MIME });
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       await navigator.share({ files: [file], title: filename });
       return true;
     }
-  } catch { /* ignore */ }
+  } catch {}
 
-  // standard download fallback
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -663,77 +656,6 @@ function isTruthy(v){
   return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
 }
 
-/***********************
- * ✅ REQUIRED-FIELD HIGHLIGHTING
- ***********************/
-let didAttemptExport = false;
-
-function setFieldError(el, on){
-  if (!el || !el.classList) return;
-  el.classList.toggle("field-error", !!on);
-  const id = el.id;
-  if (!id) return;
-  const lab = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-  if (lab) lab.classList.toggle("field-error-label", !!on);
-}
-
-function clearAllFieldErrors(){
-  document.querySelectorAll(".field-error").forEach(el => el.classList.remove("field-error"));
-  document.querySelectorAll(".field-error-label").forEach(el => el.classList.remove("field-error-label"));
-}
-
-function validateForDownload(){
-  const missing = [];
-
-  // Require: at least one of Requested By or Sample Name
-  const hasName = !!(norm(els.reqName.value) || norm(els.sampleName.value));
-  if (!hasName){
-    missing.push(els.reqName, els.sampleName);
-  }
-
-  // Must have loaded data
-  if (!wb){
-    // highlight load button if they try to export without loading
-    missing.push(els.btnLoad);
-  }
-
-  if (currentMode === "foam"){
-    if (!norm(els.foamColor.value)) missing.push(els.foamColor);
-    if (!norm(els.foamThickness.value)) missing.push(els.foamThickness);
-
-    const needsPartColor = !els.foamPartColorRow.classList.contains("hidden");
-    if (needsPartColor && !norm(els.foamPartColor.value)) missing.push(els.foamPartColor);
-
-    if (!norm(els.foamWheel.value)) missing.push(els.foamWheel);
-    if (!norm(els.foamPadSize.value)) missing.push(els.foamPadSize);
-  } else {
-    if (!norm(els.woolPadSize?.value)) missing.push(els.woolPadSize);
-    if (!norm(els.woolNap?.value)) missing.push(els.woolNap);
-    if (!norm(els.woolYarn?.value)) missing.push(els.woolYarn);
-    if (!norm(els.woolBacking?.value)) missing.push(els.woolBacking);
-    if (!norm(els.woolPoly?.value)) missing.push(els.woolPoly);
-    if (!norm(els.woolMil?.value)) missing.push(els.woolMil);
-  }
-
-  return { ok: missing.length === 0, missing: Array.from(new Set(missing.filter(Boolean))) };
-}
-
-function syncHighlights(scrollToFirst=false){
-  clearAllFieldErrors();
-  const v = validateForDownload();
-  if (!v.ok){
-    v.missing.forEach(el => setFieldError(el, true));
-    if (scrollToFirst){
-      const first = v.missing.find(el => el && el.scrollIntoView);
-      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-  }
-  return v;
-}
-
-/***********************
- * UI HELPERS
- ***********************/
 function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
   const prev = keepValue ? sel.value : "";
   sel.innerHTML = "";
@@ -774,6 +696,87 @@ function splitMaybeComma(v){
 
 function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
 
+/***********************
+ * ✅ REQUIRED-FIELD HIGHLIGHTING / VALIDATION
+ ***********************/
+function clearMissing(){
+  document.querySelectorAll(".row.missing").forEach(r => r.classList.remove("missing"));
+}
+function markMissing(el){
+  if (!el) return;
+  const row = el.closest(".row");
+  if (row) row.classList.add("missing");
+}
+function hasAnyName(){
+  return !!(norm(els.reqName.value) || norm(els.sampleName.value));
+}
+
+function validateForExport(){
+  clearMissing();
+
+  // must have data loaded
+  if (!wb) {
+    setStatus("Load data first.", false);
+    return { ok:false, msg:"Load data first." };
+  }
+
+  // require at least one of these
+  if (!hasAnyName()){
+    markMissing(els.reqName);
+    markMissing(els.sampleName);
+    return { ok:false, msg:"Fill Requested By or Sample Name." };
+  }
+
+  if (currentMode === "foam"){
+    // required selects
+    if (!els.foamColor.value) markMissing(els.foamColor);
+    if (!els.foamThickness.value) markMissing(els.foamThickness);
+
+    const foamNeedsPartColor = !els.foamPartColorRow.classList.contains("hidden");
+    if (foamNeedsPartColor && !els.foamPartColor.value) markMissing(els.foamPartColor);
+
+    if (!els.foamWheel.value) markMissing(els.foamWheel);
+    if (!els.foamPadSize.value) markMissing(els.foamPadSize);
+
+    const qty = parseInt(els.foamQty.value || "0", 10);
+    if (!Number.isFinite(qty) || qty < 1) markMissing(els.foamQty);
+
+    if (!els.foamLoopType.value) markMissing(els.foamLoopType);
+    if (!els.foamHole.value) markMissing(els.foamHole);
+
+    // must resolve foam row too
+    const foamResolved = resolveFoamRow();
+    if (!foamResolved) {
+      // already marked the likely causes above
+    }
+
+    const anyMissing = document.querySelector(".row.missing");
+    return { ok: !anyMissing, msg: anyMissing ? "Fill the highlighted foam fields." : "" };
+  }
+
+  // wool
+  if (!els.woolPadSize.value) markMissing(els.woolPadSize);
+  if (!els.woolNap.value) markMissing(els.woolNap);
+  if (!els.woolYarn.value) markMissing(els.woolYarn);
+  if (!els.woolBacking.value) markMissing(els.woolBacking);
+  if (!els.woolPoly.value) markMissing(els.woolPoly);
+  if (!els.woolMil.value) markMissing(els.woolMil);
+
+  // also must resolve the final stack row
+  if (!resolveWoolStackFinal()){
+    // highlight the combo selectors that control it
+    markMissing(els.woolBacking);
+    markMissing(els.woolPoly);
+    markMissing(els.woolMil);
+  }
+
+  const anyMissing = document.querySelector(".row.missing");
+  return { ok: !anyMissing, msg: anyMissing ? "Fill the highlighted wool fields." : "" };
+}
+
+/***********************
+ * WOOL LOGIC
+ ***********************/
 function populateWoolPadSizes(){
   setSelectOptions(els.woolPadSize, uniqSorted(woolRows, "Final OD"), "— Select Pad Size —", false);
   setSelectOptions(els.woolNap, [], "— Select Nap —", false);
@@ -885,6 +888,9 @@ function recomputeWoolAll(){
   updateDebugAndButtons();
 }
 
+/***********************
+ * MODE
+ ***********************/
 let currentMode = "foam";
 function updateMode(){
   const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
@@ -894,6 +900,9 @@ function updateMode(){
   updateDebugAndButtons();
 }
 
+/***********************
+ * GEO MAPS
+ ***********************/
 function hnorm(s){
   return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
 }
@@ -977,6 +986,9 @@ function wheelsForThickness(thkVal){
   return Array.from(wheels).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
 }
 
+/***********************
+ * FOAM
+ ***********************/
 function foamRowsByColor(color){
   const c = normU(color);
   return foamRows.filter(r => normU(r[COL.foam_color]) === c);
@@ -1060,27 +1072,7 @@ function updateDebugAndButtons(){
     selections: {
       productType: currentMode,
       requestedBy: els.reqName.value,
-      sampleName: els.sampleName.value,
-      foam: {
-        color: els.foamColor.value,
-        thickness: els.foamThickness.value,
-        partColor: els.foamPartColor.value || null,
-        wheel: wheel || null,
-        padSize: pad || null,
-        qty: els.foamQty.value,
-        loopType: els.foamLoopType.value || null,
-        finishedPad: els.foamHole.value || null
-      },
-      wool: {
-        padSize: els.woolPadSize?.value || null,
-        nap: els.woolNap?.value || null,
-        yarn: els.woolYarn?.value || null,
-        orientation: els.woolOrientation?.value || null,
-        backing: els.woolBacking?.value || null,
-        poly: els.woolPoly?.value || null,
-        mil: els.woolMil?.value || null,
-        print: els.woolPrint?.value || null
-      }
+      sampleName: els.sampleName.value
     },
     resolvedFoam: foamResolved ? {
       part: norm(foamResolved[COL.foam_part]),
@@ -1091,14 +1083,8 @@ function updateDebugAndButtons(){
   };
   showDebug(out);
 
-  const hasName = (norm(els.reqName.value) || norm(els.sampleName.value));
-  const foamComplete = !!(wb && foamResolved && wheel && pad);
-  const woolComplete = isWoolComplete();
-  const canDownload = hasName && ((currentMode==="foam" && foamComplete) || (currentMode==="wool" && woolComplete));
-  els.btnDownload.disabled = !canDownload;
-
-  // ✅ After the first attempt, keep highlights updated live
-  if (didAttemptExport) syncHighlights(false);
+  // ✅ we no longer disable based on completeness; only disable until data is loaded
+  els.btnDownload.disabled = !wb;
 }
 
 /***********************
@@ -1150,10 +1136,12 @@ function applyDbToApp(db){
   recomputeFoam();
   recomputeWoolAll();
   updateDebugAndButtons();
+
+  // ✅ allow export button once data is loaded
+  els.btnDownload.disabled = false;
 }
 
 async function loadAll(){
-  // HARD GATE: do not load Excel or JSON unless tenant validated
   if (!isTenantOk()) throw new Error("Sign-in required (tenant).");
 
   setStatus("Loading data…", null);
@@ -1161,8 +1149,9 @@ async function loadAll(){
   wb = null; foamRows = []; geoRows = []; woolRows = []; stackRows = [];
   THK_COLS = []; THK_MAP = new Map();
   setInputsEnabled(false);
+  els.btnDownload.disabled = true;
+  clearMissing();
 
-  // 1) Try Excel
   try {
     const wbExcel = await loadWorkbookFromSharePointAttempt();
     const db = workbookToDb(wbExcel);
@@ -1178,7 +1167,6 @@ async function loadAll(){
     console.warn("Excel load failed; falling back to JSON.", e);
   }
 
-  // 2) JSON fallback (still tenant gated)
   const db = await loadDbFromGitHub();
   applyDbToApp(db);
   setStatus(`Loaded from JSON fallback. Foam rows: ${foamRows.length}, Geo rows: ${geoRows.length}`, true);
@@ -1207,14 +1195,15 @@ function buildFileName(){
 }
 
 /***********************
- * EXPORT BOM (FIXED DOWNLOAD + REQUIRED HIGHLIGHTS)
+ * EXPORT BOM (now validates + highlights instead of disabling)
  ***********************/
 async function exportTestBOM(){
-  didAttemptExport = true;
-
-  const v = syncHighlights(true);
+  const v = validateForExport();
   if (!v.ok){
-    alert("Please fill the highlighted fields before exporting.");
+    alert(v.msg || "Fill the highlighted fields.");
+    // scroll to first missing field
+    const first = document.querySelector(".row.missing");
+    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
 
@@ -1223,8 +1212,11 @@ async function exportTestBOM(){
   if (currentMode==="wool") {
     const base = resolveWoolBase();
     const stack = resolveWoolStackFinal();
-    if (!base) return alert("Select a valid tufted pad (Final OD + Nap + Yarn).");
-    if (!stack) return alert("Select Backing + Poly Type + MIL (must resolve to one stack row).");
+    if (!base || !stack) {
+      // should be caught by validateForExport, but keep safe
+      alert("Fill the highlighted wool fields.");
+      return;
+    }
 
     const aoa = [
       ["Requested By", norm(els.reqName.value)],
@@ -1265,11 +1257,13 @@ async function exportTestBOM(){
   }
 
   const foamResolved = resolveFoamRow();
-  if (!foamResolved) return alert("Select a valid foam (Color + Thickness + Part Color if needed).");
+  if (!foamResolved) {
+    alert("Fill the highlighted foam fields.");
+    return;
+  }
 
   const wheel = els.foamWheel.value;
   const pad = els.foamPadSize.value;
-  if (!wheel || !pad) return alert("Select Wheel + Pad Size.");
 
   const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
 
@@ -1311,19 +1305,18 @@ async function exportTestBOM(){
  ***********************/
 els.btnLoad.addEventListener("click", async ()=>{
   try {
-    // Gate everything behind tenant sign-in
     if (!requireTenantOrRedirect()) return;
     await loadAll();
   } catch (e){
     setStatus(String(e), false);
     showDebug(String(e));
     setInputsEnabled(false);
+    els.btnDownload.disabled = true;
   }
 });
 
 els.btnReset.addEventListener("click", ()=>{
-  didAttemptExport = false;
-  clearAllFieldErrors();
+  clearMissing();
 
   els.reqName.value="";
   els.sampleName.value="";
@@ -1349,42 +1342,47 @@ els.btnReset.addEventListener("click", ()=>{
   recomputeFoam();
   recomputeWoolAll();
   updateDebugAndButtons();
+
+  // if data is still loaded, keep export enabled
+  els.btnDownload.disabled = !wb;
 });
 
-// Download button
 els.btnDownload.addEventListener("click", exportTestBOM);
 
-// Inputs
-els.reqName.addEventListener("input", updateDebugAndButtons);
-els.sampleName.addEventListener("input", updateDebugAndButtons);
+function onAnyChange(){
+  clearMissing();         // ✅ remove red highlights as they edit
+  updateDebugAndButtons();
+}
 
-els.foamColor.addEventListener("change", recomputeFoam);
-els.foamThickness.addEventListener("change", recomputeFoam);
-els.foamPartColor.addEventListener("change", recomputeFoam);
-els.foamWheel.addEventListener("change", recomputeFoam);
-els.foamPadSize.addEventListener("change", recomputeFoam);
-els.foamQty.addEventListener("input", updateDebugAndButtons);
-els.foamLoopType.addEventListener("change", updateDebugAndButtons);
-els.foamHole.addEventListener("change", updateDebugAndButtons);
-els.foamNotes.addEventListener("input", updateDebugAndButtons);
+els.reqName.addEventListener("input", onAnyChange);
+els.sampleName.addEventListener("input", onAnyChange);
 
-if (els.woolPadSize) els.woolPadSize.addEventListener("change", recomputeWoolAll);
-if (els.woolNap) els.woolNap.addEventListener("change", recomputeWoolAll);
-if (els.woolYarn) els.woolYarn.addEventListener("change", recomputeWoolAll);
-if (els.woolBacking) els.woolBacking.addEventListener("change", recomputeWoolAll);
-if (els.woolPoly) els.woolPoly.addEventListener("change", recomputeWoolAll);
-if (els.woolMil) els.woolMil.addEventListener("change", recomputeWoolAll);
-if (els.woolOrientation) els.woolOrientation.addEventListener("change", updateDebugAndButtons);
-if (els.woolPrint) els.woolPrint.addEventListener("change", updateDebugAndButtons);
+els.foamColor.addEventListener("change", ()=>{ clearMissing(); recomputeFoam(); });
+els.foamThickness.addEventListener("change", ()=>{ clearMissing(); recomputeFoam(); });
+els.foamPartColor.addEventListener("change", ()=>{ clearMissing(); recomputeFoam(); });
+els.foamWheel.addEventListener("change", ()=>{ clearMissing(); recomputeFoam(); });
+els.foamPadSize.addEventListener("change", ()=>{ clearMissing(); recomputeFoam(); });
+els.foamQty.addEventListener("input", onAnyChange);
+els.foamLoopType.addEventListener("change", onAnyChange);
+els.foamHole.addEventListener("change", onAnyChange);
+els.foamNotes.addEventListener("input", onAnyChange);
+
+if (els.woolPadSize) els.woolPadSize.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolNap) els.woolNap.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolYarn) els.woolYarn.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolBacking) els.woolBacking.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolPoly) els.woolPoly.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolMil) els.woolMil.addEventListener("change", ()=>{ clearMissing(); recomputeWoolAll(); });
+if (els.woolOrientation) els.woolOrientation.addEventListener("change", onAnyChange);
+if (els.woolPrint) els.woolPrint.addEventListener("change", onAnyChange);
 
 document.querySelectorAll('input[name="prodType"]').forEach(r =>
-  r.addEventListener("change", ()=>{ updateMode(); updateDebugAndButtons(); })
+  r.addEventListener("change", ()=>{ clearMissing(); updateMode(); })
 );
 
 (function init(){
   setStatus("Not loaded", null);
   showDebug("—");
-
   setSelectOptions(els.foamColor, [], "Load data first", false);
   setSelectOptions(els.foamThickness, [], "Load data first", false);
   setSelectOptions(els.foamWheel, [], "Load data first", false);
@@ -1399,6 +1397,7 @@ document.querySelectorAll('input[name="prodType"]').forEach(r =>
   if (els.woolMil) setSelectOptions(els.woolMil, [], "Load data first", false);
 
   setInputsEnabled(false);
+  els.btnDownload.disabled = true;
   updateMode();
 })();
 </script>
