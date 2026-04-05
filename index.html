@@ -1629,10 +1629,55 @@ function susoMatchFoamCatalogColor(lowScrubbed){
   return null;
 }
 
+function susoMatchWoolOdToCatalog(n, ods){
+  if (n == null || !ods || !ods.length) return null;
+  const hit = pickMatchingOption(String(n), ods)
+    || ods.find(o => toNum(o) != null && Math.abs(toNum(o) - Number(n)) < 1e-6);
+  return hit || null;
+}
+
+/**
+ * Final OD from one utterance: prefer explicit inches / labels over a bare number (ambiguous).
+ */
+function susoInferWoolPadSizeFromContext(low, raw, ods){
+  const r = String(raw || "");
+  const l = String(low || "");
+  if (!ods.length) return null;
+
+  const mInch = /\b(\d+(?:\.\d+)?)\s*(?:inch|inches|in\.?|")\b/i.exec(r);
+  if (mInch){
+    const v = parseFloat(mInch[1]);
+    if (Number.isFinite(v) && v >= 1 && v <= 64){
+      const hit = susoMatchWoolOdToCatalog(v, ods);
+      if (hit) return { value: hit, confidence: "high" };
+    }
+  }
+
+  const mLabel = /\b(?:final\s*od|final\s+od|pad\s*size|diameter)\s*[:\s]*(\d+(?:\.\d+)?)\b/i.exec(l);
+  if (mLabel){
+    const v = parseFloat(mLabel[1]);
+    if (Number.isFinite(v) && v >= 1 && v <= 64){
+      const hit = susoMatchWoolOdToCatalog(v, ods);
+      if (hit) return { value: hit, confidence: "high" };
+    }
+  }
+
+  const nums = susoExtractNumbersForFoam(l);
+  if (nums.length >= 1){
+    const v = nums[0].value;
+    if (v >= 1 && v <= 64){
+      const hit = susoMatchWoolOdToCatalog(v, ods);
+      if (hit) return { value: hit, confidence: "low" };
+    }
+  }
+  return null;
+}
+
 function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   const fields = {};
   const notes = [];
   const clarifications = [];
+  const confirmations = [];
 
   const rb = susoExtractRequestedBy(low, raw);
   if (rb) fields.reqName = rb;
@@ -1681,13 +1726,16 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     }
   }
 
+  let woolOdMeta = null;
   if (woolish && woolRows.length){
     const ods = uniqSorted(woolRows, "Final OD");
-    const n = nums[0] && nums[0].value;
-    if (n != null){
-      const hit = pickMatchingOption(String(n), ods) || ods.find(o => norm(o).includes(String(n)));
-      if (hit) fields.woolPadSize = hit;
-    }
+    woolOdMeta = susoInferWoolPadSizeFromContext(low, raw, ods);
+    if (woolOdMeta) fields.woolPadSize = woolOdMeta.value;
+  }
+
+  if (!fields.woolOrientation && woolish){
+    if (/\bcurved\b/i.test(low)) fields.woolOrientation = "Curved";
+    else if (/\bflat\b/i.test(low)) fields.woolOrientation = "Flat";
   }
 
   if (!woolish && fields._padNum != null && geoRows.length && fields._padNum < 72){
@@ -1718,7 +1766,27 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   if (/\bno\s+hole\b/i.test(raw)) fields.foamHole = "No Hole";
   if (/\bwith\s+hole\b/i.test(raw)) fields.foamHole = "With Hole";
 
-  return { fields, notes, clarifications };
+  if (woolish && woolRows.length){
+    const bits = [];
+    if (fields.woolPadSize && woolOdMeta){
+      if (woolOdMeta.confidence === "low"){
+        bits.push("**Final OD " + fields.woolPadSize + "** (best guess from a number — say **no** or the correct size if not)");
+      } else {
+        bits.push("**Final OD " + fields.woolPadSize + "**");
+      }
+    }
+    if (fields.woolOrientation && !semantic.orientation && /\b(curved|flat)\b/i.test(low)){
+      bits.push("**orientation " + fields.woolOrientation + "** (from “curved” / “flat” in your text)");
+    }
+    const multiField = (fields.woolPadSize ? 1 : 0) + (fields.woolOrientation ? 1 : 0) >= 2;
+    const tentativeOd = woolOdMeta && woolOdMeta.confidence === "low";
+    const orientFromText = fields.woolOrientation && !semantic.orientation && /\b(curved|flat)\b/i.test(low);
+    if (bits.length && (multiField || tentativeOd || orientFromText)){
+      confirmations.push("From your message I’m using " + bits.join(" and ") + ". **Tell me if any of that’s wrong.**");
+    }
+  }
+
+  return { fields, notes, clarifications, confirmations };
 }
 
 function susoRouteConfiguratorInterpretation(intent, text, low, trace){
@@ -1779,6 +1847,7 @@ function susoRouteConfiguratorInterpretation(intent, text, low, trace){
     fields: inferred.fields,
     inferenceNotes: inferred.notes,
     clarifications: inferred.clarifications,
+    confirmations: inferred.confirmations || [],
     confidence: inferred.clarifications.length ? "partial" : "high"
   };
   const routed = susoNormalizeConfiguratorRequest("configurator", "set_fields", intent._suso.domain, "fill_partial", payload);
@@ -2453,6 +2522,12 @@ function runSusoCommand(){
     const tail = lab ? " (" + lab + ")" : "";
     const shown = susoSanitizeForBoldEcho(tryResult.value);
     appendChat("suso", "Got it — **" + shown + "**" + tail + ".");
+  }
+
+  if (k === "set_fields" && setFieldsPayload && setFieldsPayload.confirmations && setFieldsPayload.confirmations.length){
+    for (const line of setFieldsPayload.confirmations){
+      appendChat("suso", line);
+    }
   }
 
   const slot = getNextMissingSlot();
