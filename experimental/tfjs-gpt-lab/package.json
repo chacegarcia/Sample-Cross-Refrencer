@@ -1,0 +1,18 @@
+{
+  "name": "suso-gpt-lab",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GPT-style transformer (TF.js) — use tfjs-node-gpu for CUDA training",
+  "type": "module",
+  "scripts": {
+    "train": "node train-gpt.mjs",
+    "train:full": "node train-gpt.mjs --preset=full"
+  },
+  "dependencies": {
+    "@tensorflow/tfjs": "^4.22.0"
+  },
+  "optionalDependencies": {
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "@tensorflow/tfjs-node-gpu": "^4.22.0"
+  }
+}

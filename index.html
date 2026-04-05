@@ -721,16 +721,6 @@ async function pushDbUpdate(dbObject) {
 /***********************
  * YOUR APP LOGIC
  ***********************/
-const COL = {
-  foam_color: "Color",
-  foam_part: "Part",
-  foam_partColor: "Part Color",
-  foam_thickness: "Thickness",
-  foam_firmness: "Firmness",
-  geo_wheel: "Wheel",
-  geo_padSizes: "Pad Sizes",
-  geo_grindDia: "Grinded Loop Dia",
-};
 
 let wb=null;
 let foamRows=[];
@@ -777,9 +767,7 @@ const els = {
 };
 
 const susoAgentMode = true;
-let susoAwaitingStep = null;
-/** State before the last processed chat turn (single-level undo). */
-let susoUndoSnapshot = null;
+/** Wizard step + undo live on window.SusoSession (see js/suso/bind-adapters.js). */
 
 function setStatus(text, ok=null){
   if (!els.status) return;
@@ -791,56 +779,6 @@ function setStatus(text, ok=null){
 function showDebug(obj){
   els.debug.textContent = (typeof obj === "string") ? obj : JSON.stringify(obj, null, 2);
 }
-function norm(v){ return String(v ?? "").replace(/\u00A0/g," ").trim(); }
-function normU(v){ return norm(v).toUpperCase(); }
-function toNum(v){
-  const n = parseFloat(String(v ?? "").trim());
-  return Number.isFinite(n) ? n : null;
-}
-function isTruthy(v){
-  const s = normU(v);
-  return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
-}
-
-function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
-  const prev = keepValue ? sel.value : "";
-  sel.innerHTML = "";
-  const ph = document.createElement("option");
-  ph.value = "";
-  ph.textContent = options.length ? placeholder : "— No options —";
-  sel.appendChild(ph);
-
-  for(const opt of options){
-    const o=document.createElement("option");
-    o.value=opt;
-    o.textContent=opt;
-    sel.appendChild(o);
-  }
-
-  if (keepValue && prev && options.some(o=>normU(o)===normU(prev))){
-    sel.value = options.find(o=>normU(o)===normU(prev));
-  } else {
-    sel.value = "";
-  }
-  sel.disabled = options.length === 0;
-}
-
-function uniqSorted(rows, colName){
-  const set = new Set();
-  for (const r of rows){
-    const v = norm(r[colName]);
-    if (v) set.add(v);
-  }
-  return Array.from(set).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
-}
-
-function splitMaybeComma(v){
-  const s = norm(v);
-  if (!s) return [];
-  return s.split(",").map(x=>x.trim()).filter(Boolean);
-}
-
-function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
 
 /***********************
  * ✅ REQUIRED-FIELD HIGHLIGHTING / VALIDATION
@@ -853,1269 +791,60 @@ function markMissing(el){
   const row = el.closest(".row");
   if (row) row.classList.add("missing");
 }
-function hasAnyName(){
-  return !!(norm(els.reqName.value) || norm(els.sampleName.value));
-}
 
-function validateForExport(){
-  clearMissing();
-
-  // must have data loaded
-  if (!wb) {
-    setStatus("Load data first.", false);
-    return { ok:false, msg:"Load data first." };
-  }
-
-  if (!currentMode){
-    return { ok:false, msg:"Choose foam pad or tufted wool first." };
-  }
-
-  // require at least one of these
-  if (!hasAnyName()){
-    markMissing(els.reqName);
-    markMissing(els.sampleName);
-    return { ok:false, msg:"Fill Requested By or Sample Name." };
-  }
-
-  if (currentMode === "foam"){
-    // required selects
-    if (!els.foamColor.value) markMissing(els.foamColor);
-    if (!els.foamThickness.value) markMissing(els.foamThickness);
-
-    const foamNeedsPartColor = !els.foamPartColorRow.classList.contains("hidden");
-    if (foamNeedsPartColor && !els.foamPartColor.value) markMissing(els.foamPartColor);
-
-    if (!els.foamWheel.value) markMissing(els.foamWheel);
-    if (!els.foamPadSize.value) markMissing(els.foamPadSize);
-
-    const qty = parseInt(els.foamQty.value || "0", 10);
-    if (!Number.isFinite(qty) || qty < 1) markMissing(els.foamQty);
-
-    if (!els.foamLoopType.value) markMissing(els.foamLoopType);
-    if (!els.foamHole.value) markMissing(els.foamHole);
-
-    // must resolve foam row too
-    const foamResolved = resolveFoamRow();
-    if (!foamResolved) {
-      // already marked the likely causes above
-    }
-
-    const anyMissing = document.querySelector(".row.missing");
-    return { ok: !anyMissing, msg: anyMissing ? "Fill the highlighted foam fields." : "" };
-  }
-
-  // wool
-  if (!els.woolPadSize.value) markMissing(els.woolPadSize);
-  if (!els.woolNap.value) markMissing(els.woolNap);
-  if (!els.woolYarn.value) markMissing(els.woolYarn);
-  if (!els.woolBacking.value) markMissing(els.woolBacking);
-  if (!els.woolPoly.value) markMissing(els.woolPoly);
-  if (!els.woolMil.value) markMissing(els.woolMil);
-
-  // also must resolve the final stack row
-  if (!resolveWoolStackFinal()){
-    // highlight the combo selectors that control it
-    markMissing(els.woolBacking);
-    markMissing(els.woolPoly);
-    markMissing(els.woolMil);
-  }
-
-  const anyMissing = document.querySelector(".row.missing");
-  return { ok: !anyMissing, msg: anyMissing ? "Fill the highlighted wool fields." : "" };
-}
-
-/***********************
- * WOOL LOGIC
- ***********************/
-function populateWoolPadSizes(){
-  setSelectOptions(els.woolPadSize, uniqSorted(woolRows, "Final OD"), "— Select Pad Size —", false);
-  setSelectOptions(els.woolNap, [], "— Select Nap —", false);
-  setSelectOptions(els.woolYarn, [], "— Select Yarn —", false);
-  setSelectOptions(els.woolBacking, [], "— Select Backing —", false);
-  setSelectOptions(els.woolPoly, [], "— Select Poly —", false);
-  setSelectOptions(els.woolMil, [], "— Select MIL —", false);
-}
-
-function recomputeWoolNap(){
-  const od = els.woolPadSize.value;
-  const naps = od ? uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(od)), "Nap Length") : [];
-  setSelectOptions(els.woolNap, naps, "— Select Nap —", true);
-}
-
-function recomputeWoolYarn(){
-  const od = els.woolPadSize.value;
-  const nap = els.woolNap.value;
-  const rows = woolRows.filter(r =>
-    (!od || normU(r["Final OD"]) === normU(od)) &&
-    (!nap || normU(r["Nap Length"]) === normU(nap))
-  );
-  const yarns = uniqSorted(rows, "Yarn");
-  setSelectOptions(els.woolYarn, yarns, "— Select Yarn —", true);
-}
-
-function resolveWoolDia(){
-  const od = els.woolPadSize.value;
-  const nap = els.woolNap.value;
-  if (!od || !nap) return null;
-  const rows = woolRows.filter(r =>
-    normU(r["Final OD"])===normU(od) &&
-    normU(r["Nap Length"])===normU(nap)
-  );
-  if (!rows.length) return null;
-  const dias = Array.from(new Set(rows.map(r => norm(r["Op Tufted Pad Dia"])).filter(Boolean)));
-  if (dias.length === 1) return dias[0];
-  const yarn = els.woolYarn.value;
-  if (yarn){
-    const rr = rows.find(x => normU(x["Yarn"])===normU(yarn));
-    return rr ? norm(rr["Op Tufted Pad Dia"]) : null;
-  }
-  return null;
-}
-
-function resolveWoolBase(){
-  const od = els.woolPadSize.value;
-  const nap = els.woolNap.value;
-  const yarn = els.woolYarn.value;
-  if (!od || !nap || !yarn) return null;
-  return woolRows.find(r =>
-    normU(r["Final OD"])===normU(od) &&
-    normU(r["Nap Length"])===normU(nap) &&
-    normU(r["Yarn"])===normU(yarn)
-  ) || null;
-}
-
-function stackCandidatesForBase(){
-  const dia = resolveWoolDia();
-  if (!dia) return [];
-  return stackRows.filter(r => norm(r["Poly Dia"]) === dia);
-}
-
-function resolveWoolStackFinal(){
-  const candidates = stackCandidatesForBase();
-  let cand = candidates.slice();
-
-  if (els.woolBacking.value === "Loop") cand = cand.filter(r => isTruthy(r["Loop"]));
-  if (els.woolBacking.value === "Canvas") cand = cand.filter(r => isTruthy(r["Canvas"]));
-
-  if (els.woolPoly.value) cand = cand.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
-  if (els.woolMil.value) cand = cand.filter(r => normU(r["Poly Size MIL"]) === normU(els.woolMil.value));
-
-  return cand.length === 1 ? cand[0] : null;
-}
-
-function isWoolComplete(){
-  const base = resolveWoolBase();
-  const stack = resolveWoolStackFinal();
-  return !!(wb && base && stack && els.woolBacking.value && els.woolPoly.value && els.woolMil.value);
-}
-
-function recomputeWoolStack(){
-  const candidates = stackCandidatesForBase();
-
-  const backs = [];
-  if (candidates.some(r => isTruthy(r["Loop"]))) backs.push("Loop");
-  if (candidates.some(r => isTruthy(r["Canvas"]))) backs.push("Canvas");
-  setSelectOptions(els.woolBacking, backs, "— Select Backing —", true);
-
-  let cand2 = candidates.slice();
-  if (els.woolBacking.value === "Loop") cand2 = cand2.filter(r => isTruthy(r["Loop"]));
-  if (els.woolBacking.value === "Canvas") cand2 = cand2.filter(r => isTruthy(r["Canvas"]));
-
-  const polys = uniqSorted(cand2, "Poly Type");
-  setSelectOptions(els.woolPoly, polys, "— Select Poly —", true);
-
-  let cand3 = cand2.slice();
-  if (els.woolPoly.value) cand3 = cand3.filter(r => normU(r["Poly Type"]) === normU(els.woolPoly.value));
-
-  const mils = uniqSorted(cand3, "Poly Size MIL");
-  setSelectOptions(els.woolMil, mils, "— Select MIL —", true);
-}
-
-function recomputeWoolAll(){
-  recomputeWoolNap();
-  recomputeWoolYarn();
-  recomputeWoolStack();
-  updateDebugAndButtons();
-}
-
-/***********************
- * MODE
- ***********************/
 let currentMode = null;
-function updateMode(){
-  const el = document.querySelector('input[name="prodType"]:checked');
-  const type = el ? el.value : null;
-  currentMode = type;
-  if (type === "foam"){
-    document.getElementById("foamCard").style.display = "";
-    document.getElementById("woolCard").style.display = "none";
-  } else if (type === "wool"){
-    document.getElementById("foamCard").style.display = "none";
-    document.getElementById("woolCard").style.display = "";
-  } else {
-    document.getElementById("foamCard").style.display = "none";
-    document.getElementById("woolCard").style.display = "none";
-  }
-  updateDebugAndButtons();
+
+function norm(v){ return String(v ?? "").replace(/\u00A0/g," ").trim(); }
+function normU(v){ return norm(v).toUpperCase(); }
+function toNum(v){
+  const n = parseFloat(String(v ?? "").trim());
+  return Number.isFinite(n) ? n : null;
 }
-
-/***********************
- * GEO MAPS
- ***********************/
-function hnorm(s){
-  return String(s ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim().toUpperCase();
+function isTruthy(v){
+  const s = normU(v);
+  return s === "Y" || s === "YES" || s === "1" || s === "TRUE" || s === "T";
 }
-function sheetToJsonByHeaders(ws, requiredHeaders){
-  const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-  const req = requiredHeaders.map(hnorm);
-
-  let headerRowIdx = -1;
-  let headers = null;
-
-  for (let i=0; i<Math.min(50, aoa.length); i++){
-    const row = (aoa[i]||[]).map(hnorm).filter(Boolean);
-    if (!row.length) continue;
-    const ok = req.every(rh => row.includes(rh));
-    if (ok){
-      headerRowIdx = i;
-      headers = (aoa[i]||[]).map(v => String(v ?? "").replace(/\u00A0/g," ").replace(/\s+/g," ").trim());
-      break;
-    }
-  }
-
-  if (headerRowIdx === -1 || !headers){
-    return XLSX.utils.sheet_to_json(ws, { defval: "" });
-  }
-
-  const out=[];
-  for (let r=headerRowIdx+1; r<aoa.length; r++){
-    const row = aoa[r]||[];
-    const obj={};
-    for (let c=0; c<headers.length; c++){
-      const k=headers[c];
-      if (!k) continue;
-      obj[k]=row[c] ?? "";
-    }
-    if (Object.values(obj).some(v=>norm(v))) out.push(obj);
-  }
-  return out;
-}
-
-let THK_COLS = [];
-let THK_MAP = new Map();
-
-function buildThkMaps(){
-  THK_COLS = [];
-  THK_MAP = new Map();
-  if (!geoRows.length) return;
-
-  for (const k of Object.keys(geoRows[0])){
-    if (hnorm(k).startsWith("THK_")){
-      const col = k.trim();
-      THK_COLS.push(col);
-      const suffix = col.trim().slice(4);
-      const n = parseFloat(suffix);
-      if (Number.isFinite(n)) THK_MAP.set(n, col);
-    }
-  }
-  THK_COLS.sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
-}
-
-function thkBucketCol(thkVal){
-  const t = toNum(thkVal);
-  if (t === null) return null;
-  if (t < 0.875) return THK_MAP.get(0.875) || "THK_0.875";
-  if (THK_MAP.has(t)) return THK_MAP.get(t);
-  for (const [n,col] of THK_MAP.entries()){
-    if (Math.abs(n - t) < 1e-9) return col;
-  }
-  return null;
-}
-
-function wheelsForThickness(thkVal){
-  const col = thkBucketCol(thkVal);
-  if (!col) return [];
-  const wheels = new Set();
-  for (const r of geoRows){
-    if (isTruthy(r[col])){
-      const w = norm(r[COL.geo_wheel]);
-      if (w) wheels.add(w);
-    }
-  }
-  return Array.from(wheels).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
-}
-
-/** Numeric thickness values (inches) that appear in geo for this wheel across THK_* columns. */
-function thicknessesForWheel(wheelVal){
-  const w = normU(wheelVal);
-  if (!geoRows.length || !THK_MAP.size) return [];
-  const found = new Set();
-  for (const r of geoRows){
-    if (normU(r[COL.geo_wheel]) !== w) continue;
-    for (const [n, col] of THK_MAP.entries()){
-      if (isTruthy(r[col])) found.add(n);
-    }
-  }
-  return Array.from(found).sort((a, b) => a - b);
-}
-
-/***********************
- * FOAM
- ***********************/
-function foamRowsByColor(color){
-  const c = normU(color);
-  return foamRows.filter(r => normU(r[COL.foam_color]) === c);
-}
-function foamRowsByColorThickness(color, thickness){
-  const c = normU(color);
-  const t = toNum(thickness);
-  if (!c || t === null) return [];
-  return foamRows.filter(r => {
-    if (normU(r[COL.foam_color]) !== c) return false;
-    const rt = toNum(r[COL.foam_thickness]);
-    return rt !== null && Math.abs(rt - t) < 1e-9;
-  });
-}
-function geoRowsByWheel(wheel){
-  const w = normU(wheel);
-  return geoRows.filter(r => normU(r[COL.geo_wheel]) === w);
-}
-
-function resolveFoamRow(){
-  const color = els.foamColor.value;
-  const thk = els.foamThickness.value;
-  if (!color || !thk) return null;
-
-  const matches = foamRowsByColorThickness(color, thk);
-  if (matches.length === 1) return matches[0];
-
-  const pc = els.foamPartColor.value;
-  if (!pc) return null;
-
-  return matches.find(r => normU(r[COL.foam_partColor]) === normU(pc)) || null;
-}
-
-function recomputeFoam(){
-  const color = els.foamColor.value;
-
-  const thicknessOpts = color ? uniqSorted(foamRowsByColor(color), COL.foam_thickness) : [];
-  setSelectOptions(els.foamThickness, thicknessOpts, "— Select Thickness —", true);
-
-  const thk = els.foamThickness.value;
-  const matches = (color && thk) ? foamRowsByColorThickness(color, thk) : [];
-
-  if (matches.length > 1){
-    els.foamPartColorRow.classList.remove("hidden");
-    const pcs = Array.from(new Set(matches.map(r => norm(r[COL.foam_partColor])).filter(Boolean)))
-      .sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
-    setSelectOptions(els.foamPartColor, pcs, "— Select Part Color —", true);
-  } else {
-    els.foamPartColorRow.classList.add("hidden");
-    els.foamPartColor.innerHTML = '<option value="">—</option>';
-    els.foamPartColor.value = "";
-  }
-
-  const wheelOpts = thk ? wheelsForThickness(thk) : uniqSorted(geoRows, COL.geo_wheel);
-  const prevWheel = els.foamWheel.value;
-  setSelectOptions(els.foamWheel, wheelOpts, "— Select Wheel —", true);
-  if (prevWheel && !wheelOpts.some(w => normU(w) === normU(prevWheel))){
-    els.foamWheel.value = "";
-  }
-
-  const padOpts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
-  const padUnique = Array.from(new Set(padOpts)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
-  setSelectOptions(els.foamPadSize, padUnique, "— Select Pad Size —", true);
-
-  updateDebugAndButtons();
-}
-
-function updateDebugAndButtons(){
-  const foamResolved = resolveFoamRow();
-  const wheel = els.foamWheel.value;
-  const pad = els.foamPadSize.value;
-
-  let grindDia = null;
-  if (wheel && pad){
-    const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
-    grindDia = row ? norm(row[COL.geo_grindDia]) : null;
-  }
-
-  const out = {
-    sheetCounts: { foamRows: foamRows.length, geoRows: geoRows.length, woolRows: woolRows.length, stackRows: stackRows.length },
-    selections: {
-      productType: currentMode,
-      requestedBy: els.reqName.value,
-      sampleName: els.sampleName.value
-    },
-    resolvedFoam: foamResolved ? {
-      part: norm(foamResolved[COL.foam_part]),
-      partColor: norm(foamResolved[COL.foam_partColor]),
-      firmness: norm(foamResolved[COL.foam_firmness])
-    } : null,
-    resolvedGeo: grindDia ? { grindedLoopDia: grindDia } : null
-  };
-  showDebug(out);
-
-  // ✅ we no longer disable based on completeness; only disable until data is loaded
-  els.btnDownload.disabled = !wb;
-}
-
-/***********************
- * Suso core (reusable NL layer) + configurator phrase pack + adapter
- * Extracted patterns: phrase/chunk scan, semantic slots, domain, routing, trace.
- * Workbook/data-sheet Q&A: domain 'document_query' + adapter stub (see execute path).
- ***********************/
-
-/** Future Excel / data-sheet attributes (shared document phrase pack). */
-const SUSO_PHRASE_PACK_DOCUMENT = [
-  { phrase: "pressure rating", category: "attribute", canonical: "pressure rating", pack: "document" },
-  { phrase: "operating temperature", category: "attribute", canonical: "operating temperature", pack: "document" },
-  { phrase: "tensile strength", category: "attribute", canonical: "tensile strength", pack: "document" },
-  { phrase: "hardness", category: "attribute", canonical: "hardness", pack: "document" },
-  { phrase: "dimensions", category: "attribute", canonical: "dimensions", pack: "document" },
-  { phrase: "chemical resistance", category: "attribute", canonical: "chemical resistance", pack: "document" },
-  { phrase: "part number", category: "attribute", canonical: "part number", pack: "document" },
-  { phrase: "model number", category: "attribute", canonical: "model number", pack: "document" },
-  { phrase: "material", category: "attribute", canonical: "material", pack: "document" },
-  { phrase: "data sheet", category: "document", canonical: "data sheet", pack: "document" },
-  { phrase: "spec sheet", category: "document", canonical: "spec sheet", pack: "document" },
-  { phrase: "msds", category: "document", canonical: "msds", pack: "document" }
-];
-
-/** Configurator-specific multi-word concepts → semantic categories. */
-const SUSO_PHRASE_PACK_CONFIGURATOR = [
-  { phrase: "foam pad", category: "product_type", canonical: "foam", pack: "lcm" },
-  { phrase: "tufted wool", category: "product_type", canonical: "wool", pack: "lcm" },
-  { phrase: "wool pad", category: "product_type", canonical: "wool", pack: "lcm" },
-  { phrase: "white loop", category: "loop_type", canonical: "White Loop", pack: "lcm" },
-  { phrase: "black loop", category: "loop_type", canonical: "Black Loop", pack: "lcm" },
-  { phrase: "no loop", category: "loop_type", canonical: "No Loop", pack: "lcm" },
-  { phrase: "with hole", category: "finished_pad", canonical: "With Hole", pack: "lcm" },
-  { phrase: "no hole", category: "finished_pad", canonical: "No Hole", pack: "lcm" },
-  { phrase: "finished pad", category: "field", canonical: "foamHole", pack: "lcm" },
-  { phrase: "loop type", category: "field", canonical: "foamLoopType", pack: "lcm" },
-  { phrase: "pad size", category: "field", canonical: "foamPadSize", pack: "lcm" },
-  { phrase: "final od", category: "field", canonical: "woolPadSize", pack: "lcm" },
-  { phrase: "nap length", category: "field", canonical: "woolNap", pack: "lcm" },
-  { phrase: "backing type", category: "field", canonical: "woolBacking", pack: "lcm" },
-  { phrase: "poly type", category: "field", canonical: "woolPoly", pack: "lcm" },
-  { phrase: "sturdyness", category: "field", canonical: "woolMil", pack: "lcm" },
-  { phrase: "mil", category: "field", canonical: "woolMil", pack: "lcm" },
-  { phrase: "my custom print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "customer sample print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "custom print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "custom artwork", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "my logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "our logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "customer logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "their logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
-  { phrase: "lc print", category: "print_type", canonical: "LC Print", pack: "lcm" },
-  { phrase: "no print", category: "print_type", canonical: "No Print", pack: "lcm" },
-  { phrase: "curved", category: "orientation", canonical: "Curved", pack: "lcm" },
-  { phrase: "flat", category: "orientation", canonical: "Flat", pack: "lcm" },
-  { phrase: "requested by", category: "field", canonical: "reqName", pack: "lcm" },
-  { phrase: "sample name", category: "field", canonical: "sampleName", pack: "lcm" },
-  { phrase: "bill of materials", category: "intent", canonical: "export_bom", pack: "lcm" },
-  { phrase: "bom export", category: "intent", canonical: "export_bom", pack: "lcm" },
-  { phrase: "grind dia", category: "concept", canonical: "grinded_loop_dia", pack: "lcm" },
-  { phrase: "grinded loop", category: "concept", canonical: "grinded_loop_dia", pack: "lcm" },
-  { phrase: "wheel size", category: "concept", canonical: "wheel", pack: "lcm" },
-  { phrase: "foam color", category: "field", canonical: "foamColor", pack: "lcm" },
-  { phrase: "foam thickness", category: "field", canonical: "foamThickness", pack: "lcm" }
-];
-
-const SUSO_ADAPTER_IDS_CONFIGURATOR = ["configurator", "document_query"];
-
-function susoWordishBoundaryOk(low, start, len){
-  if (start < 0 || len < 1 || start + len > low.length) return false;
-  const before = start > 0 ? low[start - 1] : " ";
-  const after = start + len < low.length ? low[start + len] : " ";
-  if (/[a-z0-9]/.test(before)) return false;
-  if (/[a-z0-9]/.test(after)) return false;
-  return true;
-}
-
-function susoPhraseEntriesForConfigurator(){
-  const rows = [];
-  for (const row of SUSO_PHRASE_PACK_DOCUMENT){
-    const ph = String(row.phrase || "").toLowerCase().trim();
-    if (!ph) continue;
-    rows.push({
-      phrase: ph,
-      category: row.category || "concept",
-      canonical: row.canonical !== undefined ? row.canonical : null,
-      pack: row.pack || "document"
-    });
-  }
-  for (const row of SUSO_PHRASE_PACK_CONFIGURATOR){
-    const ph = String(row.phrase || "").toLowerCase().trim();
-    if (!ph) continue;
-    rows.push({
-      phrase: ph,
-      category: row.category || "concept",
-      canonical: row.canonical !== undefined ? row.canonical : null,
-      pack: row.pack || "lcm"
-    });
-  }
-  rows.sort((a, b) => b.phrase.length - a.phrase.length || String(a.phrase).localeCompare(String(b.phrase)));
-  const seen = new Set();
-  const out = [];
-  for (const r of rows){
-    const k = r.phrase + "\0" + r.category + "\0" + (r.canonical || "");
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(r);
-  }
-  return out;
-}
-
-function susoCollectPhraseMatches(low){
-  if (!low) return [];
-  const phrases = susoPhraseEntriesForConfigurator();
-  const out = [];
-  let i = 0;
-  while (i < low.length){
-    if (/\s/.test(low[i])){ i++; continue; }
-    let best = null;
-    for (const p of phrases){
-      const plen = p.phrase.length;
-      if (plen > low.length - i) continue;
-      if (low.slice(i, i + plen) !== p.phrase) continue;
-      if (!susoWordishBoundaryOk(low, i, plen)) continue;
-      best = p;
-      break;
-    }
-    if (best){
-      out.push(Object.assign({}, best, { start: i, end: i + best.phrase.length }));
-      i += best.phrase.length;
-    } else {
-      i++;
-    }
-  }
-  return out;
-}
-
-function susoInitIntentShell(intent, trace){
-  if (!intent._suso) intent._suso = { locks: Object.create(null), trace: trace || [], domain: null };
-  intent._suso.trace = trace || intent._suso.trace || [];
-  return intent;
-}
-
-function susoBuildConfiguratorSemanticSlots(low, matches){
-  const mlow = String(low || "");
-  const slots = {
-    questionType: null,
-    intentTag: null,
-    productType: null,
-    loopType: null,
-    finishedPad: null,
-    orientation: null,
-    printType: null,
-    attributes: [],
-    document: null,
-    domainCue: []
-  };
-  if (/\b(what|which|how much|how many|list)\b/.test(mlow)) slots.questionType = "wh_question";
-  else if (/\bwhy\b/.test(mlow)) slots.questionType = "why_question";
-  if (/\b(show|find|tell|give|lookup|display|available)\b/.test(mlow)) slots.intentTag = "retrieve";
-
-  for (const m of matches){
-    if (m.category === "product_type" && m.canonical) slots.productType = m.canonical;
-    if (m.category === "loop_type" && m.canonical) slots.loopType = m.canonical;
-    if (m.category === "finished_pad" && m.canonical) slots.finishedPad = m.canonical;
-    if (m.category === "orientation" && m.canonical) slots.orientation = m.canonical;
-    if (m.category === "print_type" && m.canonical) slots.printType = m.canonical;
-    if (m.category === "attribute" && m.canonical){
-      slots.attributes.push(m.canonical);
-      slots.domainCue.push("attribute:" + m.canonical);
-    }
-    if (m.category === "document" && m.canonical){
-      slots.document = m.canonical;
-      slots.domainCue.push("document:" + m.canonical);
-    }
-    if (m.category === "intent" && m.canonical === "export_bom") slots.intentTag = "export_bom";
-  }
-  return slots;
-}
-
-function parseIntentConfigurator(text){
-  const raw = (text || "").trim();
-  const t = raw.toLowerCase();
-  const intent = { raw, type: "configure", action: null, direction: null, target: null, insane: false };
-  if (!t){ intent.type = "none"; return intent; }
-  if (/\b(fly|divine|god|miracle)\b/.test(t)) intent.insane = true;
-
-  if ((/\b(export|download)\b/.test(t) && /\b(bom|xlsx|excel|spreadsheet)\b/.test(t)) || /^\s*export\s+bom\s*$/i.test(raw) || /^\s*export\s*$/i.test(raw.trim())){
-    intent.action = "export_bom";
-  } else if (/\breset\b/.test(t) && /\b(form|fields|all|everything|inputs?)\b/.test(t) || /^\s*reset\s*$/i.test(raw.trim())){
-    intent.action = "reset_form";
-  } else if (/\bwhy\b/.test(t) && (/\b(invalid|wrong|error|bad|doesn'?t|not\s+work|won'?t)\b/.test(t) || /\b(wool|combination|combo)\b/.test(t))){
-    intent.action = "explain_invalid";
-  } else if (/\b(validate|check)\b/.test(t) && /\b(form|fields|selections?)\b/.test(t)){
-    intent.action = "validate";
-  } else if (slotsLookLikeOptionQuestion(t)){
-    intent.action = "ask_options";
-  } else if (/\b(compat|compatible|work with|go with)\b/.test(t)){
-    intent.action = "ask_compatibility";
-  }
-
-  if (!intent.action && /\b(set|put|use)\b/.test(t) && /\b(requested|requester)\b/.test(t)) intent.action = "fill_fields";
-  else if (!intent.action) intent.action = "fill_fields";
-
-  return intent;
-
-  function slotsLookLikeOptionQuestion(tt){
-    return (/\b(what|which|list)\b/.test(tt) && /\b(available|option|choices?)\b/.test(tt))
-      || (/\bwhat\b/.test(tt) && /\bwheel/.test(tt) && /\b(size|sizes|available)\b/.test(tt));
-  }
-}
-
-function susoClassifyDomainConfigurator(low, semantic, baseIntent){
-  if (baseIntent.insane) return "meta";
-  const sem = semantic || {};
-  if (baseIntent.action === "explain_invalid" || baseIntent.action === "ask_compatibility") return "configurator";
-  if (baseIntent.action === "ask_options") return "configurator";
-  if (sem.questionType === "why_question" && /\b(wool|foam|pad|form)\b/.test(low)) return "configurator";
-  if (sem.intentTag === "export_bom" || baseIntent.action === "export_bom") return "configurator";
-  if (sem.intentTag === "retrieve" && (sem.attributes.length || sem.document) && /\b(data|sheet|pdf|spec|part|material|pressure|temperature|dimension)\b/.test(low)){
-    return "document_query";
-  }
-  if ((sem.questionType === "wh_question" || /\b(what|which)\b/.test(low)) && (sem.attributes.length > 0 || /\b(pressure|temperature|dimension|material|part number|model number)\b/.test(low))){
-    return "document_query";
-  }
-  return "configurator";
-}
-
-function susoPickAdapterConfigurator(domain){
-  if (domain === "document_query") return { adapter: "document_query", rule: "domain_document_query" };
-  return { adapter: "configurator", rule: "domain_configurator" };
-}
-
-function susoListRejectedAdaptersConfigurator(chosen){
-  return SUSO_ADAPTER_IDS_CONFIGURATOR.filter(id => id !== chosen).map(id => ({
-    adapter: id,
-    reason: "not_selected:winner=" + chosen
-  }));
-}
-
-function susoNormalizeConfiguratorRequest(adapter, kind, domain, rule, payload){
-  return {
-    version: 1,
-    kind,
-    adapter,
-    domain,
-    rule,
-    payload,
-    rejectedAlternatives: susoListRejectedAdaptersConfigurator(adapter)
-  };
-}
-
-function susoExtractRequestedBy(low, raw){
-  let m = raw.match(/\b(?:requested by|requester|set requested by)\s*[:\-]?\s*(.+)$/i);
-  if (m) return m[1].trim();
-  m = low.match(/\bset\s+requested\s+by\s+(.+)$/);
-  if (m) return m[1].trim().replace(/\s+/g, " ");
-  return null;
-}
-
-/** Normalize European decimals (0,875) before parsing so we don't get 0 and 875 as two tokens. */
 function susoNormalizeNumericText(s){
   return String(s || "").replace(/\b(\d+),(\d+)\b/g, "$1.$2");
 }
-
-function susoExtractNumbersForFoam(low){
-  const s = susoNormalizeNumericText(low);
-  const nums = [];
-  const re = /\b(\d+(?:\.\d+)?)\b/gi;
-  let x;
-  while ((x = re.exec(s)) !== null){
-    const n = parseFloat(x[1]);
-    if (Number.isFinite(n)) nums.push({ value: n, index: x.index });
+function setSelectOptions(sel, options, placeholder="— Select —", keepValue=true){
+  const prev = keepValue ? sel.value : "";
+  sel.innerHTML = "";
+  const ph = document.createElement("option");
+  ph.value = "";
+  ph.textContent = options.length ? placeholder : "— No options —";
+  sel.appendChild(ph);
+  for (const opt of options){
+    const o = document.createElement("option");
+    o.value = opt;
+    o.textContent = opt;
+    sel.appendChild(o);
   }
-  return nums;
-}
-
-/**
- * Infer _thicknessNum vs _padNum using context (inch/pad/thick keywords and magnitude).
- * Avoids treating 5.5" pad as thickness or 0,875 as pad 875.
- */
-function susoInferFoamThicknessAndPad(low, raw, nums, fields){
-  const r = susoNormalizeNumericText(String(raw || "")).toLowerCase();
-  const l = susoNormalizeNumericText(String(low || "")).toLowerCase();
-
-  const inchPadMatch = /\b(\d+(?:\.\d+)?)\s*(?:inch|inches|in\b|"|')\b/i.exec(r);
-  if (inchPadMatch){
-    const v = parseFloat(inchPadMatch[1]);
-    if (Number.isFinite(v) && v >= 1){ fields._padNum = v; return; }
-  }
-
-  if (!nums.length) return;
-
-  if (nums.length >= 2){
-    const vals = nums.map(n => n.value).sort((a, b) => a - b);
-    const sm = vals[0];
-    const lg = vals[vals.length - 1];
-    if (sm < 2.25 && lg >= 2){ fields._thicknessNum = sm; fields._padNum = lg; return; }
-  }
-
-  if (nums.length === 1){
-    const v = nums[0].value;
-    if (v >= 2.25 && v <= 48){
-      fields._padNum = v;
-      return;
-    }
-    if (v > 0 && v < 2.25){
-      fields._thicknessNum = v;
-      return;
-    }
-  }
-}
-
-function pickMatchingOption(want, options){
-  if (!want || !options || !options.length) return null;
-  const wu = normU(want);
-  const exact = options.find(o => normU(o) === wu);
-  if (exact) return exact;
-  const substr = options.find(o => wu.includes(normU(o)) || normU(o).includes(wu));
-  if (substr) return substr;
-  return null;
-}
-
-/**
- * Strip phrases whose English words overlap foam *color* tokens (e.g. "white" in "white loop", "no" in "no print")
- * so NL does not set the wrong field. Does not remove generic color words when they stand alone.
- */
-function susoScrubForFoamColorScan(s){
-  return String(s || "")
-    .replace(/\bwhite\s+loop\b/gi, " ")
-    .replace(/\bblack\s+loop\b/gi, " ")
-    .replace(/\bno\s+loop\b/gi, " ")
-    .replace(/\bwith\s+hole\b/gi, " ")
-    .replace(/\bno\s+hole\b/gi, " ")
-    .replace(/\bno\s+print\b/gi, " ")
-    .replace(/\blc\s+print\b/gi, " ")
-    .replace(/\bcustomer\s+sample\s+print\b/gi, " ")
-    .replace(/\bcurved\b/gi, " ")
-    .replace(/\bflat\b/gi, " ")
-    .replace(/\bloop\s+backing\b/gi, " ")
-    .replace(/\bcanvas\s+backing\b/gi, " ");
-}
-
-function susoEscapeRe(s){
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * True if user text matches a catalog foam color. Any color in the loaded sheet is supported;
- * two-tone swatches (BLUE/GREY, BLACK/GREY, …) use the same rules as ORANGE/GREY — not hardcoded.
- */
-function susoCatalogColorPhraseMatchesHay(hay, catalogColor){
-  const hayLow = String(hay || "").toLowerCase();
-  const lc = norm(catalogColor).toLowerCase();
-  if (!lc || lc.length < 2) return false;
-  if (lc.includes("/")){
-    const parts = lc.split("/").map(p => p.trim()).filter(Boolean);
-    if (parts.length < 2) return false;
-    const slashFlex = parts.map(p => susoEscapeRe(p)).join("\\s*\\/\\s*");
-    if (new RegExp(slashFlex, "i").test(hayLow)) return true;
-    if (parts.length === 2){
-      const [a, b] = parts;
-      const s1 = "\\b" + susoEscapeRe(a) + "\\b\\s+\\b" + susoEscapeRe(b) + "\\b";
-      const s2 = "\\b" + susoEscapeRe(b) + "\\b\\s+\\b" + susoEscapeRe(a) + "\\b";
-      if (new RegExp(s1, "i").test(hayLow) || new RegExp(s2, "i").test(hayLow)) return true;
-    } else {
-      const spacePat = parts.map(p => "\\b" + susoEscapeRe(p) + "\\b").join("\\s+");
-      if (new RegExp(spacePat, "i").test(hayLow)) return true;
-    }
-    return false;
-  }
-  return new RegExp("\\b" + susoEscapeRe(lc) + "\\b", "i").test(hayLow);
-}
-
-/** Longest / composite swatches first so ORANGE/GREY wins over GREY when user says "orange grey". */
-function susoMatchFoamCatalogColor(lowScrubbed){
-  if (!foamRows.length || !String(lowScrubbed || "").trim()) return null;
-  const colors = uniqSorted(foamRows, COL.foam_color)
-    .slice()
-    .sort((a, b) => norm(b).length - norm(a).length);
-  const hay = String(lowScrubbed);
-  for (const c of colors){
-    if (susoCatalogColorPhraseMatchesHay(hay, c)) return c;
-  }
-  return null;
-}
-
-function susoMatchWoolOdToCatalog(n, ods){
-  if (n == null || !ods || !ods.length) return null;
-  const hit = pickMatchingOption(String(n), ods)
-    || ods.find(o => toNum(o) != null && Math.abs(toNum(o) - Number(n)) < 1e-6);
-  return hit || null;
-}
-
-/**
- * Final OD from one utterance: prefer explicit inches / labels over a bare number (ambiguous).
- */
-function susoInferWoolPadSizeFromContext(low, raw, ods){
-  const r = String(raw || "");
-  const l = String(low || "");
-  if (!ods.length) return null;
-
-  const mInch = /\b(\d+(?:\.\d+)?)\s*(?:inch|inches|in\.?|")\b/i.exec(r);
-  if (mInch){
-    const v = parseFloat(mInch[1]);
-    if (Number.isFinite(v) && v >= 1 && v <= 64){
-      const hit = susoMatchWoolOdToCatalog(v, ods);
-      if (hit) return { value: hit, confidence: "high" };
-    }
-  }
-
-  const mLabel = /\b(?:final\s*od|final\s+od|pad\s*size|diameter)\s*[:\s]*(\d+(?:\.\d+)?)\b/i.exec(l);
-  if (mLabel){
-    const v = parseFloat(mLabel[1]);
-    if (Number.isFinite(v) && v >= 1 && v <= 64){
-      const hit = susoMatchWoolOdToCatalog(v, ods);
-      if (hit) return { value: hit, confidence: "high" };
-    }
-  }
-
-  const nums = susoExtractNumbersForFoam(l);
-  if (nums.length >= 1){
-    const v = nums[0].value;
-    if (v >= 1 && v <= 64){
-      const hit = susoMatchWoolOdToCatalog(v, ods);
-      if (hit) return { value: hit, confidence: "low" };
-    }
-  }
-  return null;
-}
-
-/**
- * If foam color + wheel already imply a single catalog thickness for this color, set it.
- * Skips when thickness was set from numbers or user text elsewhere.
- */
-function susoInferFoamThicknessWhenUniqueForColorAndWheel(fields){
-  if (fields.foamThickness || !fields.foamWheel || !fields.foamColor) return;
-  const nums = thicknessesForWheel(fields.foamWheel);
-  if (!nums.length) return;
-  const foamOpts = uniqSorted(foamRowsByColor(fields.foamColor), COL.foam_thickness);
-  const candidates = foamOpts.filter(t => {
-    const n = toNum(t);
-    return n !== null && nums.some(bw => Math.abs(bw - n) < 1e-9);
-  });
-  if (candidates.length === 1) fields.foamThickness = candidates[0];
-}
-
-/** After wheel (and color) are on the form: auto-set thickness when geo ∩ foam leaves one choice. */
-function susoTryApplyUniqueFoamThicknessFromWheel(){
-  if (currentMode !== "foam" || !foamRows.length || !geoRows.length) return null;
-  if (els.foamThickness && els.foamThickness.value) return null;
-  const color = els.foamColor ? els.foamColor.value : "";
-  const wheel = els.foamWheel ? els.foamWheel.value : "";
-  if (!color || !wheel) return null;
-  const nums = thicknessesForWheel(wheel);
-  if (!nums.length) return null;
-  const foamOpts = uniqSorted(foamRowsByColor(color), COL.foam_thickness);
-  const candidates = foamOpts.filter(t => {
-    const n = toNum(t);
-    return n !== null && nums.some(bw => Math.abs(bw - n) < 1e-9);
-  });
-  if (candidates.length !== 1) return null;
-  els.foamThickness.value = candidates[0];
-  recomputeFoam();
-  return candidates[0];
-}
-
-function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
-  const fields = {};
-  const notes = [];
-  const clarifications = [];
-  const confirmations = [];
-
-  const rb = susoExtractRequestedBy(low, raw);
-  if (rb) fields.reqName = rb;
-
-  if (semantic.productType === "foam") fields.prodType = "foam";
-  if (semantic.productType === "wool") fields.prodType = "wool";
-  if (/\bfoam\b/.test(low) && !semantic.productType) fields.prodType = "foam";
-  if (/\btufted\b/.test(low) && /\bwool\b/.test(low)) fields.prodType = "wool";
-
-  if (semantic.loopType) fields.foamLoopType = semantic.loopType;
-  if (semantic.finishedPad) fields.foamHole = semantic.finishedPad;
-  if (semantic.orientation) fields.woolOrientation = semantic.orientation;
-  if (semantic.printType) fields.woolPrint = semantic.printType;
-
-  const lowForFoamColor = susoScrubForFoamColorScan(low);
-  const matchedFoamColor = susoMatchFoamCatalogColor(lowForFoamColor);
-  if (matchedFoamColor) fields.foamColor = matchedFoamColor;
-
-  const nums = susoExtractNumbersForFoam(low);
-  const woolish = semantic.productType === "wool" || fields.prodType === "wool"
-    || /\btufted\s+wool\b|\bwool\s+pad\b/.test(low)
-    || (/\bwool\b/.test(low) && !/\bfoam\s+pad\b/.test(low) && !/\bfoam\b/.test(low));
-
-  if (!fields.woolPrint && (woolish || currentMode === "wool")){
-    const wp = susoResolveWoolPrintIntentPhrase(low);
-    if (wp) fields.woolPrint = wp;
-  }
-
-  if (!woolish && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
-    susoInferFoamThicknessAndPad(low, raw, nums, fields);
-    if (fields._thicknessNum != null && fields._thicknessNum >= 2.25){
-      fields._padNum = fields._thicknessNum;
-      delete fields._thicknessNum;
-    }
-  }
-
-  if (!woolish && geoRows.length && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
-    const wheels = uniqSorted(geoRows, COL.geo_wheel).slice().sort((a, b) => norm(b).length - norm(a).length);
-    const wPick = matchOptionFromUserText(low, wheels);
-    if (wPick) fields.foamWheel = wPick;
-  }
-
-  if (fields._thicknessNum != null && foamRows.length){
-    const thkOpts = fields.foamColor
-      ? uniqSorted(foamRowsByColor(fields.foamColor), COL.foam_thickness)
-      : uniqSorted(foamRows, COL.foam_thickness);
-    const matchThk = thkOpts.map(t => ({ t, n: toNum(t) })).find(o => o.n !== null && Math.abs(o.n - fields._thicknessNum) < 1e-6);
-    if (matchThk) fields.foamThickness = matchThk.t;
-    else if (fields._thicknessNum < 2.5){
-      notes.push("Thickness " + fields._thicknessNum + " not in current option list (after color context).");
-      clarifications.push("Pick thickness from the list or adjust color first.");
-    }
-  }
-
-  if (!woolish && foamRows.length && geoRows.length){
-    susoInferFoamThicknessWhenUniqueForColorAndWheel(fields);
-  }
-
-  let woolOdMeta = null;
-  if (woolish && woolRows.length){
-    const ods = uniqSorted(woolRows, "Final OD");
-    woolOdMeta = susoInferWoolPadSizeFromContext(low, raw, ods);
-    if (woolOdMeta) fields.woolPadSize = woolOdMeta.value;
-  }
-
-  if (!fields.woolOrientation && woolish){
-    if (/\bcurved\b/i.test(low)) fields.woolOrientation = "Curved";
-    else if (/\bflat\b/i.test(low)) fields.woolOrientation = "Flat";
-  }
-
-  if (!woolish && fields._padNum != null && geoRows.length && fields._padNum < 72){
-    const wheelRef = fields.foamWheel || els.foamWheel.value;
-    const pads = wheelRef
-      ? splitMaybeComma(uniqSorted(geoRowsByWheel(wheelRef), COL.geo_padSizes).join(","))
-      : [...new Set(geoRows.flatMap(r => splitMaybeComma(r[COL.geo_padSizes])))];
-    const asStr = String(fields._padNum);
-    const hit = pads.find(p => Math.abs(toNum(p) - fields._padNum) < 1e-6 || normU(p) === normU(asStr))
-      || pads.find(p => norm(p).includes(asStr));
-    if (hit) fields.foamPadSize = hit;
-    else if (fields._padNum <= 24){
-      notes.push("Pad size " + fields._padNum + " not matched yet (pick **wheel** first if you haven’t).");
-      clarifications.push("We’ll confirm pad size after wheel.");
-    }
-  }
-
-  for (const m of phraseMatches){
-    if (m.category === "loop_type" && m.canonical) fields.foamLoopType = m.canonical;
-    if (m.category === "finished_pad" && m.canonical) fields.foamHole = m.canonical;
-  }
-
-  if (/white\s+loop|black\s+loop|no\s+loop/i.test(raw) && !fields.foamLoopType){
-    if (/white\s+loop/i.test(raw)) fields.foamLoopType = "White Loop";
-    else if (/black\s+loop/i.test(raw)) fields.foamLoopType = "Black Loop";
-    else if (/no\s+loop/i.test(raw)) fields.foamLoopType = "No Loop";
-  }
-  if (/\bno\s+hole\b/i.test(raw)) fields.foamHole = "No Hole";
-  if (/\bwith\s+hole\b/i.test(raw)) fields.foamHole = "With Hole";
-
-  if (woolish && woolRows.length){
-    const bits = [];
-    if (fields.woolPadSize && woolOdMeta){
-      if (woolOdMeta.confidence === "low"){
-        bits.push("**Final OD " + fields.woolPadSize + "** (best guess from a number — say **no** or the correct size if not)");
-      } else {
-        bits.push("**Final OD " + fields.woolPadSize + "**");
-      }
-    }
-    if (fields.woolOrientation && !semantic.orientation && /\b(curved|flat)\b/i.test(low)){
-      bits.push("**orientation " + fields.woolOrientation + "** (from “curved” / “flat” in your text)");
-    }
-    const multiField = (fields.woolPadSize ? 1 : 0) + (fields.woolOrientation ? 1 : 0) >= 2;
-    const tentativeOd = woolOdMeta && woolOdMeta.confidence === "low";
-    const orientFromText = fields.woolOrientation && !semantic.orientation && /\b(curved|flat)\b/i.test(low);
-    if (bits.length && (multiField || tentativeOd || orientFromText)){
-      confirmations.push("From your message I’m using " + bits.join(" and ") + ". **Tell me if any of that’s wrong.**");
-    }
-  }
-
-  if (!woolish && (fields.foamWheel || fields.foamPadSize)){
-    const bits = [];
-    if (fields.foamWheel) bits.push("**wheel " + String(fields.foamWheel).replace(/\*+/g, "") + "**");
-    if (fields.foamPadSize) bits.push("**pad " + String(fields.foamPadSize).replace(/\*+/g, "") + "**");
-    if (bits.length){
-      confirmations.push("From your message I’m using " + bits.join(" and ") + " for foam. **Tell me if any of that’s wrong.**");
-    }
-  }
-
-  return { fields, notes, clarifications, confirmations };
-}
-
-function susoRouteConfiguratorInterpretation(intent, text, low, trace){
-  const sem = intent.semantic || {};
-  const pick = susoPickAdapterConfigurator(intent._suso.domain);
-  const adapter = pick.adapter;
-
-  if (adapter === "document_query"){
-    const payload = {
-      raw: text,
-      questionType: sem.questionType,
-      attributes: sem.attributes.slice ? sem.attributes.slice() : [],
-      document: sem.document || null,
-      execution: { stub: true, note: "Wire workbook / data-sheet resolver (Excel graph, embeddings, or RAG)." }
-    };
-    const routed = susoNormalizeConfiguratorRequest(adapter, "document_query", intent._suso.domain, pick.rule, payload);
-    trace.push({ t: "routing", adapter, kind: routed.kind, rule: pick.rule, domain: intent._suso.domain });
-    return routed;
-  }
-
-  const base = intent;
-  if (base.action === "export_bom"){
-    const routed = susoNormalizeConfiguratorRequest("configurator", "export_bom", intent._suso.domain, "intent_export", { raw: text });
-    trace.push({ t: "routing", adapter: "configurator", kind: "export_bom", rule: "intent_export" });
-    return routed;
-  }
-  if (base.action === "reset_form"){
-    const routed = susoNormalizeConfiguratorRequest("configurator", "reset_form", intent._suso.domain, "intent_reset", { raw: text });
-    trace.push({ t: "routing", adapter: "configurator", kind: "reset_form", rule: "intent_reset" });
-    return routed;
-  }
-  if (base.action === "explain_invalid"){
-    const routed = susoNormalizeConfiguratorRequest("configurator", "explain_invalid_state", intent._suso.domain, "why_invalid", { raw: text, modeHint: currentMode });
-    trace.push({ t: "routing", adapter: "configurator", kind: "explain_invalid_state", rule: "why_invalid" });
-    return routed;
-  }
-  if (base.action === "validate"){
-    const routed = susoNormalizeConfiguratorRequest("configurator", "validate_form", intent._suso.domain, "validate", { raw: text });
-    trace.push({ t: "routing", adapter: "configurator", kind: "validate_form", rule: "validate" });
-    return routed;
-  }
-  if (base.action === "ask_options"){
-    let topic = "unknown";
-    if (/\bwheel/.test(low)) topic = "foam_wheel_sizes";
-    const routed = susoNormalizeConfiguratorRequest("configurator", "ask_options", intent._suso.domain, "options_question", { raw: text, topic });
-    trace.push({ t: "routing", adapter: "configurator", kind: "ask_options", rule: "options_question", topic });
-    return routed;
-  }
-  if (base.action === "ask_compatibility"){
-    const routed = susoNormalizeConfiguratorRequest("configurator", "ask_compatibility", intent._suso.domain, "compatibility_question", { raw: text });
-    trace.push({ t: "routing", adapter: "configurator", kind: "ask_compatibility", rule: "compatibility_question" });
-    return routed;
-  }
-
-  const inferred = susoInferFieldsFromText(low, text, sem, intent._phraseMatches || []);
-  const payload = {
-    raw: text,
-    fields: inferred.fields,
-    inferenceNotes: inferred.notes,
-    clarifications: inferred.clarifications,
-    confirmations: inferred.confirmations || [],
-    confidence: inferred.clarifications.length ? "partial" : "high"
-  };
-  const routed = susoNormalizeConfiguratorRequest("configurator", "set_fields", intent._suso.domain, "fill_partial", payload);
-  trace.push({ t: "routing", adapter: "configurator", kind: "set_fields", rule: "fill_partial", confidence: payload.confidence });
-  return routed;
-}
-
-function interpretIntentRichConfigurator(text){
-  const trace = [];
-  const base = parseIntentConfigurator(text);
-  const low = String(text || "").toLowerCase();
-  const rich = Object.assign({}, base);
-  susoInitIntentShell(rich, trace);
-
-  const phraseMatches = susoCollectPhraseMatches(low);
-  rich._phraseMatches = phraseMatches;
-  rich.semantic = susoBuildConfiguratorSemanticSlots(low, phraseMatches);
-
-  trace.push({
-    t: "phrase_layer",
-    chunks: phraseMatches.map(m => ({ phrase: m.phrase, category: m.category, canonical: m.canonical, span: [m.start, m.end], pack: m.pack || null })),
-    semanticSlots: rich.semantic
-  });
-
-  rich._suso.domain = susoClassifyDomainConfigurator(low, rich.semantic, base);
-  trace.push({ t: "domain", domain: rich._suso.domain });
-
-  const routed = susoRouteConfiguratorInterpretation(rich, text, low, trace);
-  rich.routed = routed;
-
-  trace.push({
-    t: "interpretation_path",
-    domain: rich._suso.domain,
-    adapter: routed.adapter,
-    kind: routed.kind,
-    rule: routed.rule
-  });
-  rich.intentTrace = trace;
-  return rich;
-}
-
-function applyProdType(pt){
-  if (pt === "foam") document.getElementById("ptFoam").checked = true;
-  else if (pt === "wool") document.getElementById("ptWool").checked = true;
-  updateMode();
-}
-
-function applyConfiguratorFields(partial){
-  const applied = {};
-  const skipped = {};
-
-  const setIf = (key, el, val, list)=>{
-    if (val == null || val === "") return;
-    if (list && list.length && !list.some(o => normU(o) === normU(val))){
-      skipped[key] = val;
-      return;
-    }
-    el.value = val;
-    applied[key] = val;
-  };
-
-  if (partial.reqName != null) els.reqName.value = partial.reqName;
-  if (partial.sampleName != null) els.sampleName.value = partial.sampleName;
-
-  if (partial.prodType){
-    applyProdType(partial.prodType);
-  }
-
-  if (currentMode === "foam"){
-    setIf("foamColor", els.foamColor, partial.foamColor, uniqSorted(foamRows, COL.foam_color));
-    recomputeFoam();
-    setIf("foamThickness", els.foamThickness, partial.foamThickness, uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness));
-    recomputeFoam();
-    if (!els.foamPartColorRow.classList.contains("hidden")){
-      const pcs = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
-      setIf("foamPartColor", els.foamPartColor, partial.foamPartColor, pcs);
-    }
-    recomputeFoam();
-    setIf("foamWheel", els.foamWheel, partial.foamWheel, uniqSorted(geoRows, COL.geo_wheel));
-    recomputeFoam();
-    const padOpts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
-    setIf("foamPadSize", els.foamPadSize, partial.foamPadSize, padOpts);
-    setIf("foamLoopType", els.foamLoopType, partial.foamLoopType, ["White Loop", "Black Loop", "No Loop"]);
-    setIf("foamHole", els.foamHole, partial.foamHole, ["With Hole", "No Hole"]);
-    if (partial.foamQty != null){
-      const q = parseInt(String(partial.foamQty), 10);
-      if (Number.isFinite(q) && q >= 1) els.foamQty.value = String(q);
-    }
-    if (partial.foamNotes != null) els.foamNotes.value = partial.foamNotes;
+  if (keepValue && prev && options.some(o => normU(o) === normU(prev))){
+    sel.value = options.find(o => normU(o) === normU(prev));
   } else {
-    setIf("woolPadSize", els.woolPadSize, partial.woolPadSize, uniqSorted(woolRows, "Final OD"));
-    recomputeWoolAll();
-    setIf("woolNap", els.woolNap, partial.woolNap, uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length"));
-    recomputeWoolAll();
-    setIf("woolYarn", els.woolYarn, partial.woolYarn, uniqSorted(woolRows.filter(r =>
-      normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
-    ), "Yarn"));
-    recomputeWoolAll();
-    setIf("woolOrientation", els.woolOrientation, partial.woolOrientation, ["Curved", "Flat"]);
-    recomputeWoolStack();
-    const backOpts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
-    setIf("woolBacking", els.woolBacking, partial.woolBacking, backOpts);
-    recomputeWoolStack();
-    const polyOpts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
-    setIf("woolPoly", els.woolPoly, partial.woolPoly, polyOpts);
-    recomputeWoolStack();
-    const milOpts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
-    setIf("woolMil", els.woolMil, partial.woolMil, milOpts);
-    setIf("woolPrint", els.woolPrint, partial.woolPrint, ["No Print", "LC Print", "Customer Sample Print"]);
-    if (partial.woolNotes != null) els.woolNotes.value = partial.woolNotes;
+    sel.value = "";
   }
-
-  clearMissing();
-  if (currentMode === "foam") recomputeFoam();
-  else recomputeWoolAll();
-
-  return { applied, skipped };
+  sel.disabled = options.length === 0;
 }
-
-function explainConfiguratorInvalid(){
-  if (currentMode === "wool"){
-    const base = resolveWoolBase();
-    const stack = resolveWoolStackFinal();
-    const parts = [];
-    if (!els.woolPadSize.value || !els.woolNap.value || !els.woolYarn.value) parts.push("Select Final OD, Nap, and Yarn first.");
-    if (!base) parts.push("The selected OD / Nap / Yarn does not resolve to a single wool base row.");
-    if (base && !stack) parts.push("Backing / Poly / MIL do not narrow to exactly one stack row for this tufted diameter — adjust Loop vs Canvas and Poly/MIL.");
-    if (!parts.length) parts.push("Current wool selections resolve; run export to confirm.");
-    return parts.join(" ");
+function uniqSorted(rows, colName){
+  const set = new Set();
+  for (const r of rows){
+    const v = norm(r[colName]);
+    if (v) set.add(v);
   }
-  const foamResolved = resolveFoamRow();
-  const foamParts = [];
-  if (!foamResolved) foamParts.push("Foam Part is ambiguous or incomplete — check color, thickness, and Part Color if shown.");
-  return (foamParts.length ? foamParts.join(" ") : "Foam row resolves. ") +
-    "Export also requires Requested By or Sample Name, Wheel, Pad Size, Loop Type, and Finished Pad.";
+  return Array.from(set).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
 }
-
-function runConfiguratorAdapter(routed){
-  const k = routed.kind;
-  const p = routed.payload || {};
-
-  if (k === "document_query"){
-    return {
-      text: "Document / data-sheet Q&A is not wired yet. Recognized attributes: " + (p.attributes || []).join(", ") + ". " + (p.execution && p.execution.note ? p.execution.note : ""),
-      executed: false,
-      stub: true
-    };
-  }
-  if (k === "export_bom"){
-    exportTestBOM();
-    return { text: "Triggered BOM export (same validation as the Download button).", executed: true };
-  }
-  if (k === "reset_form"){
-    els.btnReset.click();
-    return { text: "Form reset.", executed: true };
-  }
-  if (k === "validate_form"){
-    const v = validateForExport();
-    return { text: v.ok ? "Validation passed for the current mode." : ("Validation: " + (v.msg || "Fix highlighted fields.")), executed: true };
-  }
-  if (k === "ask_options"){
-    if (p.topic === "foam_wheel_sizes"){
-      if (currentMode !== "foam") return { text: "Switch to Foam Pad to inspect wheels for foam geometry.", executed: true };
-      const thk = els.foamThickness.value;
-      if (!thk) return { text: "Select a foam thickness first; wheel sizes depend on the THK column mapping.", executed: true };
-      const wheels = wheelsForThickness(thk);
-      return { text: "Wheels available for thickness " + thk + ": " + (wheels.length ? wheels.join(", ") : "(none in sheet for this bucket)"), executed: true };
-    }
-    return { text: "Ask a more specific options question (e.g. wheel sizes for this foam).", executed: false };
-  }
-  if (k === "ask_compatibility"){
-    return {
-      text: "Compatibility is enforced by the cascading dropdowns and stack resolution. " + explainConfiguratorInvalid(),
-      executed: true
-    };
-  }
-  if (k === "explain_invalid_state"){
-    const v = validateForExport();
-    return {
-      text: explainConfiguratorInvalid() + (v.ok ? "" : " Validation message: " + v.msg),
-      executed: true
-    };
-  }
-  if (k === "set_fields"){
-    const f = Object.assign({}, p.fields);
-    delete f._thicknessNum;
-    delete f._padNum;
-    const res = applyConfiguratorFields(f);
-    let msg = "Applied field updates where options matched. ";
-    if (p.inferenceNotes && p.inferenceNotes.length) msg += p.inferenceNotes.join(" ");
-    if (p.clarifications && p.clarifications.length) msg += " Note: " + p.clarifications.join(" ");
-    if (res.skipped && Object.keys(res.skipped).length) msg += " Skipped (no matching option): " + JSON.stringify(res.skipped);
-    return { text: msg.trim(), executed: true, applied: res.applied };
-  }
-
-  return { text: "Unhandled routed kind: " + k, executed: false };
+function splitMaybeComma(v){
+  const s = norm(v);
+  if (!s) return [];
+  return s.split(",").map(x=>x.trim()).filter(Boolean);
 }
+function uniq(arr){ return [...new Set(arr.filter(v => norm(v)))]; }
+
+/** Workbook → rows: deliberate parser in js/lcm/sheet-parse.js (`window.lcmWorkbookToDb`). */
+
+/** runConfiguratorAdapter supplied by js/suso/bind-adapters.js (createConfiguratorAdapter). */
 
 function showSusoTrace(obj){
   if (els.susoTrace) els.susoTrace.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
@@ -2151,356 +880,8 @@ function formatOptionsForPrompt(opts){
   return "\n\n" + opts.map((o, i) => (i + 1) + ". " + o).join("\n");
 }
 
-/**
- * Match user text to a list option: #3 / option 3 = position; bare 3 = option whose *value* is 3
- * (e.g. Final OD "3" not the third row). If no value matches, bare integer falls back to 1-based index.
- */
-function susoMatchListOptionCore(low, options){
-  if (!options || !options.length) return null;
-  const l = String(low || "").toLowerCase();
-
-  const mHash = /^\s*#\s*(\d+)\s*$/.exec(l);
-  if (mHash){
-    const i = parseInt(mHash[1], 10) - 1;
-    if (i >= 0 && i < options.length) return options[i];
-  }
-  const mOpt = /^\s*(?:option|pick)\s*#?\s*(\d+)\s*$/i.exec(l);
-  if (mOpt){
-    const i = parseInt(mOpt[1], 10) - 1;
-    if (i >= 0 && i < options.length) return options[i];
-  }
-
-  for (const o of options){
-    const ou = norm(o).toLowerCase();
-    if (l === ou || ou === l) return o;
-  }
-
-  const numOnly = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*$/i.exec(l);
-  if (numOnly){
-    const trimmed = numOnly[0].trim();
-    const want = toNum(trimmed);
-    if (want != null){
-      const valHits = options.filter(o => {
-        const on = toNum(o);
-        if (on != null && Math.abs(on - want) < 1e-9) return true;
-        return norm(o).toLowerCase() === l;
-      });
-      if (valHits.length) return valHits[0];
-    }
-    if (/^-?\d+$/.test(trimmed)){
-      const asInt = parseInt(trimmed, 10);
-      if (asInt >= 1 && asInt <= options.length) return options[asInt - 1];
-    }
-  }
-  return null;
-}
-
-function matchOptionFromUserText(text, options){
-  if (!options || !options.length) return null;
-  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const core = susoMatchListOptionCore(low, options);
-  if (core) return core;
-  for (const o of options){
-    const ou = norm(o).toLowerCase();
-    if (low.includes(ou) || ou.includes(low)) return o;
-  }
-  return null;
-}
-
-/** Foam catalog colors: prefer longest match; composite ORANGE/GREY beats GREY for "orange grey". */
-function matchFoamCatalogColorFromUserText(text, options){
-  if (!options || !options.length) return null;
-  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const core = susoMatchListOptionCore(low, options);
-  if (core) return core;
-  const sorted = options.slice().sort((a, b) => norm(b).length - norm(a).length);
-  for (const o of sorted){
-    if (susoCatalogColorPhraseMatchesHay(low, o)) return o;
-  }
-  return null;
-}
-
-/**
- * Map loose customer wording to catalog print options (tufted wool).
- * Order: explicit "no print" first, then LC, then customer / custom / logo.
- */
-function susoResolveWoolPrintIntentPhrase(low){
-  const l = String(low || "").toLowerCase();
-  if (!l.trim()) return null;
-  if (/\b(no\s+print|without\s+print|unprinted)\b/i.test(l)) return "No Print";
-  if (/\bno\s+logo\b/i.test(l)) return "No Print";
-  if (/\blc\s+print\b/i.test(l)) return "LC Print";
-  if (/^\s*lc\s*$/i.test(l.trim())) return "LC Print";
-  if (/\b(my\s+logo|our\s+logo|their\s+logo|customer\s+logo|custom\s+print|my\s+custom\s+print|my\s+custom\b|customer\s+sample|customer\s+art|supplied\s+art|branded|custom\s+artwork|artwork\s+from\s+customer|their\s+artwork)\b/i.test(l)) return "Customer Sample Print";
-  if (/\b(logo|artwork)\b/i.test(l) && !/\bno\s+(print|logo)\b/i.test(l)) return "Customer Sample Print";
-  return null;
-}
-
-function matchWoolPrintFromUserText(text, options){
-  if (!options || !options.length) return null;
-  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const core = susoMatchListOptionCore(low, options);
-  if (core) return core;
-  const resolved = susoResolveWoolPrintIntentPhrase(low);
-  if (resolved){
-    const hit = options.find(o => norm(o).toLowerCase() === resolved.toLowerCase());
-    if (hit) return hit;
-  }
-  return matchOptionFromUserText(text, options);
-}
-
-function susoStepShortLabel(stepId){
-  const map = {
-    prodType: "product type",
-    identity: "request / sample",
-    foamColor: "foam color",
-    foamThickness: "thickness",
-    foamPartColor: "part color",
-    foamWheel: "wheel",
-    foamPadSize: "pad size",
-    foamQty: "quantity",
-    foamLoopType: "loop type",
-    foamHole: "hole",
-    foamNotes: "foam notes",
-    woolPadSize: "pad size (Final OD)",
-    woolNap: "nap length",
-    woolYarn: "yarn",
-    woolOrientation: "orientation",
-    woolBacking: "backing",
-    woolPoly: "poly",
-    woolMil: "MIL",
-    woolPrint: "print",
-    woolNotes: "wool notes"
-  };
-  return map[stepId] || "";
-}
-
-function tryParseIdentityLine(text){
-  const t = norm(text);
-  if (!t) return;
-  const low = t.toLowerCase();
-  let req = null;
-  let samp = null;
-  const rb = t.match(/(?:requested\s*by|requester)\s*[:\-]?\s*([^,\n]+?)(?:\s*,|\s+sample|\s*$)/i);
-  const sn = t.match(/(?:sample\s*name|sample)\s*[:\-]?\s*(.+)$/i);
-  if (rb) req = norm(rb[1]);
-  if (sn) samp = norm(sn[1]);
-  if (!req && !samp){
-    if (t.includes(",")){
-      const p = t.split(",").map(x => norm(x)).filter(Boolean);
-      if (p.length >= 2){ req = p[0]; samp = p.slice(1).join(", "); }
-      else req = p[0];
-    } else if (!/foam|wool|pad|tufted|loop|hole|inch/i.test(low)){
-      req = t;
-    }
-  }
-  if (req) els.reqName.value = req;
-  if (samp) els.sampleName.value = samp;
-}
-
-function tryApplyStepAnswer(text, step){
-  const none = () => ({ applied: false, value: null, step: step || null });
-  if (!step || !wb) return none();
-  const low = norm(text).toLowerCase();
-  if (step === "prodType"){
-    if (/\bfoam\b/.test(low) && !/\btufted\s+wool\b/.test(low)){
-      applyProdType("foam");
-      return { applied: true, value: "Foam pad", step: "prodType" };
-    }
-    if (/\bwool\b/.test(low) || /\btufted\b/.test(low)){
-      applyProdType("wool");
-      return { applied: true, value: "Tufted wool pad", step: "prodType" };
-    }
-    return none();
-  }
-  if (step === "identity"){
-    const beforeReq = els.reqName.value;
-    const beforeSamp = els.sampleName.value;
-    tryParseIdentityLine(text);
-    if (els.reqName.value !== beforeReq || els.sampleName.value !== beforeSamp){
-      const parts = [];
-      if (els.reqName.value) parts.push("requested by " + els.reqName.value);
-      if (els.sampleName.value) parts.push("sample " + els.sampleName.value);
-      return { applied: true, value: parts.join(", "), step: "identity" };
-    }
-    return none();
-  }
-
-  let opts = [];
-  if (step === "foamColor") opts = uniqSorted(foamRows, COL.foam_color);
-  else if (step === "foamThickness") opts = els.foamColor.value ? uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness) : [];
-  else if (step === "foamPartColor"){
-    opts = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
-  }
-  else if (step === "foamWheel"){
-    opts = wheelsForThickness(els.foamThickness.value);
-    if (!opts.length) opts = uniqSorted(geoRows, COL.geo_wheel);
-  }
-  else if (step === "foamPadSize"){
-    opts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
-    opts = Array.from(new Set(opts)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
-  }
-  else if (step === "foamLoopType") opts = ["White Loop", "Black Loop", "No Loop"];
-  else if (step === "foamHole") opts = ["With Hole", "No Hole"];
-  else if (step === "woolPadSize") opts = uniqSorted(woolRows, "Final OD");
-  else if (step === "woolNap") opts = uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length");
-  else if (step === "woolYarn") opts = uniqSorted(woolRows.filter(r =>
-    normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
-  ), "Yarn");
-  else if (step === "woolOrientation") opts = ["Curved", "Flat"];
-  else if (step === "woolPrint") opts = ["No Print", "LC Print", "Customer Sample Print"];
-  else if (step === "woolBacking") opts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
-  else if (step === "woolPoly") opts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
-  else if (step === "woolMil") opts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
-
-  let pick = opts.length ? matchOptionFromUserText(text, opts) : null;
-  if (step === "foamColor" && opts.length){
-    const scrubbedAnswer = susoScrubForFoamColorScan(norm(text).toLowerCase());
-    pick = matchFoamCatalogColorFromUserText(scrubbedAnswer, opts);
-  } else if (step === "woolPrint" && opts.length){
-    pick = matchWoolPrintFromUserText(text, opts);
-  }
-
-  if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
-  if (step === "foamThickness" && pick){ els.foamThickness.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
-  if (step === "foamPartColor" && pick){ els.foamPartColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
-  if (step === "foamWheel" && pick){ els.foamWheel.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
-  if (step === "foamPadSize" && pick){ els.foamPadSize.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
-  if (step === "foamQty"){
-    const q = parseInt(String(text).replace(/,/g, "").trim(), 10);
-    if (Number.isFinite(q) && q >= 1){
-      els.foamQty.value = String(q);
-      return { applied: true, value: String(q), step };
-    }
-    return none();
-  }
-  if (step === "foamLoopType" && pick){ els.foamLoopType.value = pick; return { applied: true, value: pick, step }; }
-  if (step === "foamHole" && pick){ els.foamHole.value = pick; return { applied: true, value: pick, step }; }
-  if (step === "foamNotes"){
-    const v = norm(text);
-    if (v){ els.foamNotes.value = v; return { applied: true, value: v.length > 80 ? v.slice(0, 77) + "…" : v, step }; }
-    return none();
-  }
-
-  if (step === "woolPadSize" && pick){ els.woolPadSize.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
-  if (step === "woolNap" && pick){ els.woolNap.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
-  if (step === "woolYarn" && pick){ els.woolYarn.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
-  if (step === "woolOrientation" && pick){ els.woolOrientation.value = pick; return { applied: true, value: pick, step }; }
-  if (step === "woolBacking" && pick){ els.woolBacking.value = pick; recomputeWoolStack(); return { applied: true, value: pick, step }; }
-  if (step === "woolPoly" && pick){ els.woolPoly.value = pick; recomputeWoolStack(); return { applied: true, value: pick, step }; }
-  if (step === "woolMil" && pick){ els.woolMil.value = pick; return { applied: true, value: pick, step }; }
-  if (step === "woolPrint" && pick){ els.woolPrint.value = pick; return { applied: true, value: pick, step }; }
-  if (step === "woolNotes"){
-    const v = norm(text);
-    if (v){ els.woolNotes.value = v; return { applied: true, value: v.length > 80 ? v.slice(0, 77) + "…" : v, step }; }
-    return none();
-  }
-  return none();
-}
-
-function getNextMissingSlot(){
-  if (!wb) return { stepId: "need_load", prompt: "Load the catalog first (button above).", options: [] };
-
-  if (currentMode === null){
-    return {
-      stepId: "prodType",
-      prompt: "First, which are you configuring? **Foam pad** or **tufted wool** pad?",
-      options: ["Foam pad", "Tufted wool pad"]
-    };
-  }
-
-  if (!hasAnyName()){
-    return {
-      stepId: "identity",
-      prompt: "Who should we list as **requested by**, and what **sample name** (if any)? You can answer like: `Requested by: Jane Doe, Sample: Red test`.",
-      allowFreeText: true,
-      options: []
-    };
-  }
-
-  if (currentMode === "foam"){
-    if (!els.foamColor.value){
-      return { stepId: "foamColor", prompt: "Which **foam color**?", options: uniqSorted(foamRows, COL.foam_color) };
-    }
-    if (!els.foamThickness.value){
-      return { stepId: "foamThickness", prompt: "Which **thickness**?", options: uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness) };
-    }
-    const needPart = !els.foamPartColorRow.classList.contains("hidden");
-    if (needPart && !els.foamPartColor.value){
-      const pcs = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
-      return { stepId: "foamPartColor", prompt: "Which **part color** (foam part) applies?", options: pcs.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})) };
-    }
-    if (!els.foamWheel.value){
-      const wopts = wheelsForThickness(els.foamThickness.value);
-      return { stepId: "foamWheel", prompt: "Which **wheel**?", options: wopts.length ? wopts : uniqSorted(geoRows, COL.geo_wheel) };
-    }
-    if (!els.foamPadSize.value){
-      const pads = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
-      const padUnique = Array.from(new Set(pads)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
-      return { stepId: "foamPadSize", prompt: "Which **pad size**?", options: padUnique };
-    }
-    const qty = parseInt(els.foamQty.value || "0", 10);
-    if (!Number.isFinite(qty) || qty < 1){
-      return { stepId: "foamQty", prompt: "What **quantity** (minimum 1)?", options: [] };
-    }
-    if (!els.foamLoopType.value){
-      return { stepId: "foamLoopType", prompt: "Which **loop type**?", options: ["White Loop", "Black Loop", "No Loop"] };
-    }
-    if (!els.foamHole.value){
-      return { stepId: "foamHole", prompt: "**Finished pad** — with hole or no hole?", options: ["With Hole", "No Hole"] };
-    }
-    if (!resolveFoamRow()){
-      return { stepId: "foam_resolve", prompt: "Foam part is still ambiguous. Try adjusting **color**, **thickness**, or **part color** so one BOM row matches.", options: [] };
-    }
-    return { stepId: "complete", prompt: "**Configuration complete.** Say **export** or tap **Download BOM** to save the spreadsheet. (You can add **notes** in chat anytime before exporting.)", options: [] };
-  }
-
-  if (currentMode === "wool"){
-    if (!els.woolPadSize.value){
-      return {
-        stepId: "woolPadSize",
-        prompt: "What **final pad size (Final OD)**? Type the size (e.g. **3** or **5.5**). For a **numbered** list below, use **#3** for line 3.",
-        options: uniqSorted(woolRows, "Final OD")
-      };
-    }
-    if (!els.woolNap.value){
-      return { stepId: "woolNap", prompt: "Which **nap length**?", options: uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length") };
-    }
-    if (!els.woolYarn.value){
-      return { stepId: "woolYarn", prompt: "Which **yarn**?", options: uniqSorted(woolRows.filter(r =>
-        normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
-      ), "Yarn") };
-    }
-    if (!els.woolOrientation.value){
-      return { stepId: "woolOrientation", prompt: "**Orientation** — curved or flat?", options: ["Curved", "Flat"] };
-    }
-    recomputeWoolStack();
-    if (!els.woolBacking.value){
-      const backOpts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
-      return { stepId: "woolBacking", prompt: "Which **backing type**?", options: backOpts.length ? backOpts : ["Loop", "Canvas"] };
-    }
-    if (!els.woolPoly.value){
-      const polyOpts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
-      return { stepId: "woolPoly", prompt: "Which **poly type**?", options: polyOpts };
-    }
-    if (!els.woolMil.value){
-      const milOpts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
-      return { stepId: "woolMil", prompt: "Which **MIL (sturdyness)**?", options: milOpts };
-    }
-    if (!els.woolPrint.value){
-      return {
-        stepId: "woolPrint",
-        prompt: "Which **print**? You can say **no print**, **LC print**, or **my logo** / **custom print** (customer-supplied artwork).",
-        options: ["No Print", "LC Print", "Customer Sample Print"]
-      };
-    }
-    if (!resolveWoolBase() || !resolveWoolStackFinal()){
-      return { stepId: "wool_resolve", prompt: "That combination doesn’t narrow to one stack row yet. Try different **backing / poly / MIL** choices that appear in the list.", options: [] };
-    }
-    return { stepId: "complete", prompt: "**Configuration complete.** Say **export** or tap **Download BOM**.", options: [] };
-  }
-
-  return { stepId: "complete", prompt: "**Done.** Say **export** to download.", options: [] };
+function hasAnyName(){
+  return !!(norm(els.reqName.value) || norm(els.sampleName.value));
 }
 
 function susoCaptureFormSnapshot(){
@@ -2564,97 +945,6 @@ function susoRestoreFormSnapshot(s){
   else if (currentMode === "wool") recomputeWoolAll();
 }
 
-function susoApplyStepValue(stepId, value){
-  const v = norm(value);
-  if (!v || !stepId) return false;
-  if (stepId === "foamColor"){ els.foamColor.value = v; recomputeFoam(); return true; }
-  if (stepId === "foamThickness"){ els.foamThickness.value = v; recomputeFoam(); return true; }
-  if (stepId === "foamPartColor"){ els.foamPartColor.value = v; recomputeFoam(); return true; }
-  if (stepId === "foamWheel"){ els.foamWheel.value = v; recomputeFoam(); return true; }
-  if (stepId === "foamPadSize"){ els.foamPadSize.value = v; recomputeFoam(); return true; }
-  if (stepId === "foamLoopType"){ els.foamLoopType.value = v; return true; }
-  if (stepId === "foamHole"){ els.foamHole.value = v; return true; }
-  if (stepId === "foamQty"){
-    const q = parseInt(v, 10);
-    if (!Number.isFinite(q) || q < 1) return false;
-    els.foamQty.value = String(q);
-    return true;
-  }
-  if (stepId === "woolPadSize"){ els.woolPadSize.value = v; recomputeWoolAll(); return true; }
-  if (stepId === "woolNap"){ els.woolNap.value = v; recomputeWoolAll(); return true; }
-  if (stepId === "woolYarn"){ els.woolYarn.value = v; recomputeWoolAll(); return true; }
-  if (stepId === "woolOrientation"){ els.woolOrientation.value = v; return true; }
-  if (stepId === "woolBacking"){ els.woolBacking.value = v; recomputeWoolStack(); return true; }
-  if (stepId === "woolPoly"){ els.woolPoly.value = v; recomputeWoolStack(); return true; }
-  if (stepId === "woolMil"){ els.woolMil.value = v; return true; }
-  if (stepId === "woolPrint"){ els.woolPrint.value = v; return true; }
-  return false;
-}
-
-function susoStepAllowsAutoSingle(stepId){
-  return stepId === "foamColor" || stepId === "foamThickness" || stepId === "foamPartColor" || stepId === "foamWheel"
-    || stepId === "foamPadSize" || stepId === "foamLoopType" || stepId === "foamHole"
-    || stepId === "woolPadSize" || stepId === "woolNap" || stepId === "woolYarn" || stepId === "woolOrientation"
-    || stepId === "woolBacking" || stepId === "woolPoly" || stepId === "woolMil" || stepId === "woolPrint";
-}
-
-function susoAutoFillSingleOptionSteps(){
-  const lines = [];
-  for (let g = 0; g < 24; g++){
-    const slot = getNextMissingSlot();
-    if (["complete", "need_load", "prodType", "identity", "foam_resolve", "wool_resolve"].indexOf(slot.stepId) >= 0) break;
-    if (!slot.options || slot.options.length !== 1) break;
-    if (!susoStepAllowsAutoSingle(slot.stepId)) break;
-    const only = slot.options[0];
-    if (!susoApplyStepValue(slot.stepId, only)) break;
-    if (currentMode === "wool") recomputeWoolStack();
-    const lab = susoStepShortLabel(slot.stepId);
-    lines.push("Only one option for **" + (lab || slot.stepId) + "** — set to **" + susoSanitizeForBoldEcho(only) + "**.");
-  }
-  return lines;
-}
-
-function susoBuildProgressLine(){
-  if (!wb) return "";
-  const parts = [];
-  if (currentMode === null){
-    return "**Progress:** Pick **foam** or **tufted wool**.";
-  }
-  if (currentMode === "foam") parts.push("Foam");
-  else parts.push("Tufted wool");
-  if (hasAnyName()){
-    const who = norm(els.reqName.value);
-    const sn = norm(els.sampleName.value);
-    const idBits = [];
-    if (who) idBits.push("req **" + susoSanitizeForBoldEcho(who.length > 24 ? who.slice(0, 21) + "…" : who) + "**");
-    if (sn) idBits.push("sample **" + susoSanitizeForBoldEcho(sn.length > 20 ? sn.slice(0, 17) + "…" : sn) + "**");
-    if (idBits.length) parts.push(idBits.join(", "));
-  } else {
-    parts.push("identity pending");
-  }
-  if (currentMode === "foam"){
-    if (els.foamColor.value) parts.push("color **" + susoSanitizeForBoldEcho(els.foamColor.value) + "**");
-    if (els.foamThickness.value) parts.push("thick **" + els.foamThickness.value + "**");
-    if (els.foamPartColor && els.foamPartColor.value && !els.foamPartColorRow.classList.contains("hidden")) parts.push("part **" + susoSanitizeForBoldEcho(els.foamPartColor.value) + "**");
-    if (els.foamWheel.value) parts.push("wheel **" + susoSanitizeForBoldEcho(els.foamWheel.value) + "**");
-    if (els.foamPadSize.value) parts.push("pad **" + els.foamPadSize.value + "**");
-    const q = parseInt(els.foamQty.value || "0", 10);
-    if (Number.isFinite(q) && q >= 1) parts.push("qty **" + q + "**");
-    if (els.foamLoopType.value) parts.push(els.foamLoopType.value);
-    if (els.foamHole.value) parts.push(els.foamHole.value);
-  } else if (currentMode === "wool"){
-    if (els.woolPadSize.value) parts.push("OD **" + els.woolPadSize.value + "**");
-    if (els.woolNap.value) parts.push("nap **" + els.woolNap.value + "**");
-    if (els.woolYarn.value) parts.push("yarn **" + susoSanitizeForBoldEcho(els.woolYarn.value) + "**");
-    if (els.woolOrientation.value) parts.push(els.woolOrientation.value);
-    if (els.woolBacking.value) parts.push("back **" + susoSanitizeForBoldEcho(els.woolBacking.value) + "**");
-    if (els.woolPoly.value) parts.push("poly **" + susoSanitizeForBoldEcho(els.woolPoly.value) + "**");
-    if (els.woolMil.value) parts.push("MIL **" + els.woolMil.value + "**");
-    if (els.woolPrint.value) parts.push("print **" + susoSanitizeForBoldEcho(els.woolPrint.value) + "**");
-  }
-  return "**Progress:** " + parts.join(" · ");
-}
-
 function susoAppendProgressLine(){
   const line = susoBuildProgressLine();
   if (line) appendChat("suso", line);
@@ -2667,13 +957,13 @@ function susoTryUndoCommand(text){
     appendChat("suso", "Load the catalog first.");
     return true;
   }
-  if (!susoUndoSnapshot){
+  if (!window.SusoSession.undoSnapshot){
     appendChat("suso", "Nothing to undo yet. (Say **undo** after you’ve answered a step.)");
     susoCloseConfiguratorTurn({ awaitingAtStart: null, tryResult: { applied: true, value: null, step: null }, text: "", skipStuckHint: true });
     return true;
   }
-  susoRestoreFormSnapshot(susoUndoSnapshot);
-  susoUndoSnapshot = null;
+  susoRestoreFormSnapshot(window.SusoSession.undoSnapshot);
+  window.SusoSession.undoSnapshot = null;
   appendChat("suso", "Reverted your **last** reply — selections are back to how they were before that message.");
   susoCloseConfiguratorTurn({ awaitingAtStart: null, tryResult: { applied: true, value: null, step: null }, text: "", skipStuckHint: true });
   return true;
@@ -2689,7 +979,7 @@ function susoCloseConfiguratorTurn(ctx){
   const autoLines = susoAutoFillSingleOptionSteps();
   for (const ln of autoLines) appendChat("suso", ln);
   slot = getNextMissingSlot();
-  susoAwaitingStep = slot.stepId;
+  window.SusoSession.awaitingStep = slot.stepId;
 
   if (slot.stepId === "complete"){
     appendChat("suso", slot.prompt);
@@ -2713,8 +1003,8 @@ function startSusoSession(){
   if (!els.chatLog) return;
   els.chatLog.innerHTML = "";
   appendChat("suso", "Catalog is loaded. I’ll narrow this down step by step. First: are you ordering a **foam pad** or a **tufted wool** pad? (You can say **undo** anytime to revert your **last** reply.)");
-  susoAwaitingStep = "prodType";
-  susoUndoSnapshot = null;
+  window.SusoSession.awaitingStep = "prodType";
+  window.SusoSession.undoSnapshot = null;
 }
 
 function runSusoCommand(){
@@ -2724,7 +1014,7 @@ function runSusoCommand(){
   appendChat("user", text);
   els.susoInput.value = "";
 
-  const awaitingAtStart = susoAwaitingStep;
+  const awaitingAtStart = window.SusoSession.awaitingStep;
 
   if (susoTryUndoCommand(text)) return;
 
@@ -2733,28 +1023,18 @@ function runSusoCommand(){
   const rich = interpretIntentRichConfigurator(text);
   const exec = runConfiguratorAdapter(rich.routed);
 
-  const traceOut = {
-    phraseMatches: (rich._phraseMatches || []).map(m => ({ phrase: m.phrase, category: m.category, canonical: m.canonical, pack: m.pack })),
-    semanticSlots: rich.semantic,
-    domain: rich._suso.domain,
-    adapter: rich.routed.adapter,
-    rule: rich.routed.rule,
-    finalRequest: rich.routed,
-    execution: exec,
-    fullTrace: rich.intentTrace
-  };
-  showSusoTrace(traceOut);
+  showSusoTrace(window.buildSusoTraceOut(rich, exec));
 
   const k = rich.routed.kind;
 
   if (k === "export_bom"){
     appendChat("suso", exec.text || "Export attempted.");
-    susoAwaitingStep = getNextMissingSlot().stepId;
+    window.SusoSession.awaitingStep = getNextMissingSlot().stepId;
     return;
   }
 
   if (k === "reset_form"){
-    susoUndoSnapshot = null;
+    window.SusoSession.undoSnapshot = null;
     appendChat("suso", exec.text || "Session reset. Continue below.");
     return;
   }
@@ -2766,7 +1046,7 @@ function runSusoCommand(){
 
   if (k === "validate_form" || k === "explain_invalid_state" || k === "ask_options" || k === "ask_compatibility"){
     appendChat("suso", exec.text || "");
-    susoAwaitingStep = getNextMissingSlot().stepId;
+    window.SusoSession.awaitingStep = getNextMissingSlot().stepId;
     return;
   }
 
@@ -2779,8 +1059,8 @@ function runSusoCommand(){
     delete f._padNum;
     const exLoop = /white\s+loop|black\s+loop|no\s+loop/i.test(text);
     const exHole = /\b(with\s+hole|no\s+hole)\b/i.test(text);
-    if (susoAwaitingStep !== "foamLoopType" && !exLoop) delete f.foamLoopType;
-    if (susoAwaitingStep !== "foamHole" && !exHole) delete f.foamHole;
+    if (window.SusoSession.awaitingStep !== "foamLoopType" && !exLoop) delete f.foamLoopType;
+    if (window.SusoSession.awaitingStep !== "foamHole" && !exHole) delete f.foamHole;
 
     applyConfiguratorFields(f);
   }
@@ -2821,7 +1101,7 @@ function runSusoCommand(){
     }
   }
 
-  susoUndoSnapshot = undoBeforeThisTurn;
+  window.SusoSession.undoSnapshot = undoBeforeThisTurn;
   susoCloseConfiguratorTurn({ awaitingAtStart, tryResult, text, skipStuckHint: false });
 }
 
@@ -2829,24 +1109,10 @@ function runSusoCommand(){
  * Smart loader (Excel -> JSON), tenant-gated
  ***********************/
 function workbookToDb(wbIn){
-  const s1 = wbIn.Sheets[wbIn.SheetNames[0]];
-  const s2 = wbIn.Sheets[wbIn.SheetNames[1]];
-  const s3 = wbIn.Sheets[wbIn.SheetNames[2]];
-  const s4 = wbIn.Sheets[wbIn.SheetNames[3]];
-
-  const foam = sheetToJsonByHeaders(s1, [COL.foam_color, COL.foam_part, COL.foam_partColor, COL.foam_thickness]);
-  const geo  = sheetToJsonByHeaders(s2, [COL.geo_wheel, COL.geo_padSizes, COL.geo_grindDia]);
-  const wool = XLSX.utils.sheet_to_json(s3, { defval: "" });
-  const stack = XLSX.utils.sheet_to_json(s4, { defval: "" });
-
-  return {
-    version: 1,
-    updatedAt: new Date().toISOString(),
-    foamRows: foam,
-    geoRows: geo,
-    woolRows: wool,
-    stackRows: stack
-  };
+  if (typeof window.lcmWorkbookToDb !== "function"){
+    throw new Error("LCM sheet parser not loaded — check js/lcm/wire.js (sheet-parse).");
+  }
+  return window.lcmWorkbookToDb(wbIn);
 }
 
 function applyDbToApp(db){
@@ -2860,9 +1126,9 @@ function applyDbToApp(db){
   buildThkMaps();
   populateWoolPadSizes();
 
-  setSelectOptions(els.foamColor, uniqSorted(foamRows, COL.foam_color), "— Select Color —", false);
+  setSelectOptions(els.foamColor, uniqSorted(foamRows, window.COL.foam_color), "— Select Color —", false);
   setSelectOptions(els.foamThickness, [], "— Select Thickness —", false);
-  setSelectOptions(els.foamWheel, uniqSorted(geoRows, COL.geo_wheel), "— Select Wheel —", false);
+  setSelectOptions(els.foamWheel, uniqSorted(geoRows, window.COL.geo_wheel), "— Select Wheel —", false);
   setSelectOptions(els.foamPadSize, [], "— Select Pad Size —", false);
 
   els.foamPartColorRow.classList.add("hidden");
@@ -2892,7 +1158,6 @@ async function loadAll(){
   setStatus("Loading data…", null);
 
   wb = null; foamRows = []; geoRows = []; woolRows = []; stackRows = [];
-  THK_COLS = []; THK_MAP = new Map();
   setInputsEnabled(false);
   els.btnDownload.disabled = true;
   clearMissing();
@@ -2943,6 +1208,33 @@ function buildFileName(){
   return `${r} - ${s}.xlsx`;
 }
 
+/** SheetJS: title merge, widths, top row height, optional freeze below header block */
+function applyBomWorksheetLayout(ws, options){
+  const o = options || {};
+  const titleEndCol = o.titleEndCol != null ? o.titleEndCol : 1;
+  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: titleEndCol } }];
+  ws["!cols"] = [{ wch: 30 }, { wch: 64 }];
+  const hr = [];
+  hr[0] = { hpt: 30 };
+  hr[1] = { hpt: 20 };
+  hr[2] = { hpt: 20 };
+  hr[3] = { hpt: 6 };
+  ws["!rows"] = hr;
+  const freezeAfter = o.freezeAfterRow;
+  if (freezeAfter != null && freezeAfter >= 0) {
+    const ySplit = freezeAfter + 1;
+    const topLeftCell = "A" + (ySplit + 1);
+    if (!ws["!views"]) ws["!views"] = [];
+    ws["!views"].push({
+      state: "frozen",
+      ySplit,
+      topLeftCell,
+      activeCell: topLeftCell,
+      showGridLines: true
+    });
+  }
+}
+
 /***********************
  * EXPORT BOM (now validates + highlights instead of disabling)
  ***********************/
@@ -2971,12 +1263,15 @@ async function exportTestBOM(){
     }
 
     const aoa = [
+      ["LCM Sample Configurator — Sample BOM", ""],
+      ["Product", "Tufted Wool"],
+      ["Exported", new Date().toLocaleString()],
+      [],
+      ["— Requested info —", ""],
       ["Requested By", norm(els.reqName.value)],
       ["Sample Name", norm(els.sampleName.value)],
-      ["Generated", new Date().toLocaleString()],
       [],
-      ["Field","Value"],
-      ["Product Type", "Tufted Wool"],
+      ["— Tufted wool —", ""],
       ["Final OD", norm(els.woolPadSize.value)],
       ["Nap Length", norm(els.woolNap.value)],
       ["Yarn", norm(els.woolYarn.value)],
@@ -2986,21 +1281,24 @@ async function exportTestBOM(){
       ["MIL (Sturdyness)", norm(els.woolMil.value)],
       ["Print", norm(els.woolPrint.value)],
       [],
+      ["— Resolved base part —", ""],
       ["Base Part Num", norm(base["Part Num"])],
       ["OP Tufted Pad Dia", norm(base["Op Tufted Pad Dia"])],
       ["Substrate Type", norm(base["Substrate Type"])],
       ["Substrate Size", norm(base["Substrate Size"])],
       ["Yarn (from row)", norm(base["Yarn"])],
       [],
+      ["— Stack / poly —", ""],
       ["Stack Poly Dia", norm(stack["Poly Dia"])],
       ["Stack Backing Size", norm(stack["Backing Size"])],
       ["Stack Poly Type", norm(stack["Poly Type"])],
       ["Stack Poly MIL", norm(stack["Poly Size MIL"])],
+      [],
       ["Notes", norm(els.woolNotes?.value)]
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+    applyBomWorksheetLayout(ws, { freezeAfterRow: 3 });
     const wbOut = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
 
@@ -3021,31 +1319,36 @@ async function exportTestBOM(){
   const qty = Math.max(1, parseInt(els.foamQty.value || "1", 10));
 
   let grindDia = "";
-  const row = geoRows.find(r => normU(r[COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
-  if (row) grindDia = norm(row[COL.geo_grindDia]);
+  const row = geoRows.find(r => normU(r[window.COL.geo_wheel])===normU(wheel) && splitMaybeComma(r[window.COL.geo_padSizes]).some(p=>normU(p)===normU(pad)));
+  if (row) grindDia = norm(row[window.COL.geo_grindDia]);
 
   const aoa = [
+    ["LCM Sample Configurator — Sample BOM", ""],
+    ["Product", "Foam pad"],
+    ["Exported", new Date().toLocaleString()],
+    [],
+    ["— Requested info —", ""],
     ["Requested By", norm(els.reqName.value)],
     ["Sample Name", norm(els.sampleName.value)],
-    ["Generated", new Date().toLocaleString()],
     [],
-    ["Field","Value"],
-    ["Foam Part", norm(foamResolved[COL.foam_part])],
-    ["Foam Part Color", norm(foamResolved[COL.foam_partColor])],
+    ["— Foam & geometry —", ""],
+    ["Foam Part", norm(foamResolved[window.COL.foam_part])],
+    ["Foam Part Color", norm(foamResolved[window.COL.foam_partColor])],
     ["Foam Color", norm(els.foamColor.value)],
     ["Foam Thickness", norm(els.foamThickness.value)],
-    ["Foam Firmness", norm(foamResolved[COL.foam_firmness])],
+    ["Foam Firmness", norm(foamResolved[window.COL.foam_firmness])],
     ["Wheel", wheel],
     ["Pad Size", pad],
     ["Grinded Loop Dia", grindDia],
     ["Qty", qty],
     ["Loop Type", norm(els.foamLoopType.value)],
     ["Finished Pad", norm(els.foamHole.value)],
+    [],
     ["Notes", norm(els.foamNotes.value)],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws["!cols"] = [{ wch: 22 }, { wch: 60 }];
+  applyBomWorksheetLayout(ws, { freezeAfterRow: 3 });
 
   const wbOut = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wbOut, ws, "Test BOM");
@@ -3147,7 +1450,7 @@ if (els.susoInput) els.susoInput.addEventListener("keydown", (ev) => {
   if (ev.key === "Enter"){ ev.preventDefault(); runSusoCommand(); }
 });
 
-(function init(){
+document.addEventListener("DOMContentLoaded", function initLcmShell(){
   document.getElementById("ptFoam").checked = false;
   document.getElementById("ptWool").checked = false;
   currentMode = null;
@@ -3171,8 +1474,41 @@ if (els.susoInput) els.susoInput.addEventListener("keydown", (ev) => {
   setInputsEnabled(false);
   els.btnDownload.disabled = true;
   updateMode();
-})();
+});
+
+window.LCM_HOST = {
+  get els(){ return els; },
+  get foamRows(){ return foamRows; },
+  get geoRows(){ return geoRows; },
+  get woolRows(){ return woolRows; },
+  get stackRows(){ return stackRows; },
+  get wb(){ return wb; },
+  get currentMode(){ return currentMode; },
+  setCurrentMode(v){ currentMode = v; },
+  setSelectOptions,
+  showDebug,
+  clearMissing,
+  markMissing,
+  setStatus,
+};
 </script>
+<script type="module" src="js/lcm/wire.js"></script>
+<script>
+window.SUSO_ADAPTER_DEPS = {
+  getCurrentMode: () => currentMode,
+  exportTestBOM,
+  triggerResetClick: () => { els.btnReset.click(); },
+  validateForExport,
+  explainConfiguratorInvalid,
+  applyConfiguratorFields,
+  wheelsForThickness,
+  getFoamThickness: () => (els.foamThickness && els.foamThickness.value) || "",
+  getLlmAdapter: () => window.SUSO_LLM_ADAPTER,
+};
+</script>
+<script type="module" src="js/suso/engine/bind.js"></script>
+<script type="module" src="js/suso/bind-llm.js"></script>
+<script type="module" src="js/suso/bind-adapters.js"></script>
 
   </div>
 </body>
