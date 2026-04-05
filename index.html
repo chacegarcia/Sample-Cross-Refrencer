@@ -513,6 +513,11 @@ const FALLBACK_JSON_PATH = "./db/data.json";
 const WORKER_PUSH_URL = "https://db-updater.chacegarcia.workers.dev/";
 const TENANT_ID = "05281171-4b56-433b-95a7-ae79c44929d3";
 
+/** Must match a “Redirect URI” in Azure AD App Registration (exact string, incl. path). Uses this page so login returns where you opened the app, not only GitHub Pages. */
+function getMsalRedirectUri(){
+  return window.location.href.replace(/[?#].*$/, "");
+}
+
 /***********************
  * MSAL / AUTH
  ***********************/
@@ -520,7 +525,7 @@ const msalInstance = new msal.PublicClientApplication({
   auth: {
     clientId: "f09a19dd-0056-40c6-8af0-4a1bc6504f8b",
     authority: `https://login.microsoftonline.com/${TENANT_ID}`,
-    redirectUri: "https://chacegarcia.github.io/Sample-Cross-Refrencer/"
+    redirectUri: getMsalRedirectUri()
   },
   cache: { cacheLocation: "localStorage" }
 });
@@ -1511,6 +1516,16 @@ function pickMatchingOption(want, options){
   return null;
 }
 
+/** Remove loop / finished-pad phrases so "white" in "white loop" is not mistaken for foam color WHITE. */
+function susoScrubForFoamColorScan(s){
+  return String(s || "")
+    .replace(/\bwhite\s+loop\b/gi, " ")
+    .replace(/\bblack\s+loop\b/gi, " ")
+    .replace(/\bno\s+loop\b/gi, " ")
+    .replace(/\bwith\s+hole\b/gi, " ")
+    .replace(/\bno\s+hole\b/gi, " ");
+}
+
 function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   const fields = {};
   const notes = [];
@@ -1529,11 +1544,12 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   if (semantic.orientation) fields.woolOrientation = semantic.orientation;
   if (semantic.printType) fields.woolPrint = semantic.printType;
 
+  const lowForFoamColor = susoScrubForFoamColorScan(low);
   if (foamRows.length){
     const colors = uniqSorted(foamRows, COL.foam_color);
     for (const c of colors){
       const lc = norm(c).toLowerCase();
-      if (lc.length > 1 && new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(low)){
+      if (lc.length > 1 && new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(lowForFoamColor)){
         fields.foamColor = c;
         break;
       }
