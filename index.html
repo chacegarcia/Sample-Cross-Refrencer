@@ -778,6 +778,8 @@ const els = {
 
 const susoAgentMode = true;
 let susoAwaitingStep = null;
+/** State before the last processed chat turn (single-level undo). */
+let susoUndoSnapshot = null;
 
 function setStatus(text, ok=null){
   if (!els.status) return;
@@ -2432,11 +2434,218 @@ function getNextMissingSlot(){
   return { stepId: "complete", prompt: "**Done.** Say **export** to download.", options: [] };
 }
 
+function susoCaptureFormSnapshot(){
+  const ptFoam = document.getElementById("ptFoam");
+  const ptWool = document.getElementById("ptWool");
+  return {
+    ptFoam: !!(ptFoam && ptFoam.checked),
+    ptWool: !!(ptWool && ptWool.checked),
+    reqName: els.reqName ? els.reqName.value : "",
+    sampleName: els.sampleName ? els.sampleName.value : "",
+    foamColor: els.foamColor ? els.foamColor.value : "",
+    foamThickness: els.foamThickness ? els.foamThickness.value : "",
+    foamPartColor: els.foamPartColor ? els.foamPartColor.value : "",
+    foamWheel: els.foamWheel ? els.foamWheel.value : "",
+    foamPadSize: els.foamPadSize ? els.foamPadSize.value : "",
+    foamQty: els.foamQty ? els.foamQty.value : "",
+    foamLoopType: els.foamLoopType ? els.foamLoopType.value : "",
+    foamHole: els.foamHole ? els.foamHole.value : "",
+    foamNotes: els.foamNotes ? els.foamNotes.value : "",
+    woolPadSize: els.woolPadSize ? els.woolPadSize.value : "",
+    woolNap: els.woolNap ? els.woolNap.value : "",
+    woolYarn: els.woolYarn ? els.woolYarn.value : "",
+    woolOrientation: els.woolOrientation ? els.woolOrientation.value : "",
+    woolBacking: els.woolBacking ? els.woolBacking.value : "",
+    woolPoly: els.woolPoly ? els.woolPoly.value : "",
+    woolMil: els.woolMil ? els.woolMil.value : "",
+    woolPrint: els.woolPrint ? els.woolPrint.value : "",
+    woolNotes: els.woolNotes ? els.woolNotes.value : ""
+  };
+}
+
+function susoRestoreFormSnapshot(s){
+  if (!s) return;
+  const ptFoam = document.getElementById("ptFoam");
+  const ptWool = document.getElementById("ptWool");
+  if (ptFoam) ptFoam.checked = !!s.ptFoam;
+  if (ptWool) ptWool.checked = !!s.ptWool;
+  updateMode();
+  if (els.reqName) els.reqName.value = s.reqName || "";
+  if (els.sampleName) els.sampleName.value = s.sampleName || "";
+  if (els.foamColor) els.foamColor.value = s.foamColor || "";
+  if (els.foamThickness) els.foamThickness.value = s.foamThickness || "";
+  if (els.foamPartColor) els.foamPartColor.value = s.foamPartColor || "";
+  if (els.foamWheel) els.foamWheel.value = s.foamWheel || "";
+  if (els.foamPadSize) els.foamPadSize.value = s.foamPadSize || "";
+  if (els.foamQty) els.foamQty.value = s.foamQty || "";
+  if (els.foamLoopType) els.foamLoopType.value = s.foamLoopType || "";
+  if (els.foamHole) els.foamHole.value = s.foamHole || "";
+  if (els.foamNotes) els.foamNotes.value = s.foamNotes || "";
+  if (els.woolPadSize) els.woolPadSize.value = s.woolPadSize || "";
+  if (els.woolNap) els.woolNap.value = s.woolNap || "";
+  if (els.woolYarn) els.woolYarn.value = s.woolYarn || "";
+  if (els.woolOrientation) els.woolOrientation.value = s.woolOrientation || "";
+  if (els.woolBacking) els.woolBacking.value = s.woolBacking || "";
+  if (els.woolPoly) els.woolPoly.value = s.woolPoly || "";
+  if (els.woolMil) els.woolMil.value = s.woolMil || "";
+  if (els.woolPrint) els.woolPrint.value = s.woolPrint || "";
+  if (els.woolNotes) els.woolNotes.value = s.woolNotes || "";
+  clearMissing();
+  if (currentMode === "foam") recomputeFoam();
+  else if (currentMode === "wool") recomputeWoolAll();
+}
+
+function susoApplyStepValue(stepId, value){
+  const v = norm(value);
+  if (!v || !stepId) return false;
+  if (stepId === "foamColor"){ els.foamColor.value = v; recomputeFoam(); return true; }
+  if (stepId === "foamThickness"){ els.foamThickness.value = v; recomputeFoam(); return true; }
+  if (stepId === "foamPartColor"){ els.foamPartColor.value = v; recomputeFoam(); return true; }
+  if (stepId === "foamWheel"){ els.foamWheel.value = v; recomputeFoam(); return true; }
+  if (stepId === "foamPadSize"){ els.foamPadSize.value = v; recomputeFoam(); return true; }
+  if (stepId === "foamLoopType"){ els.foamLoopType.value = v; return true; }
+  if (stepId === "foamHole"){ els.foamHole.value = v; return true; }
+  if (stepId === "foamQty"){
+    const q = parseInt(v, 10);
+    if (!Number.isFinite(q) || q < 1) return false;
+    els.foamQty.value = String(q);
+    return true;
+  }
+  if (stepId === "woolPadSize"){ els.woolPadSize.value = v; recomputeWoolAll(); return true; }
+  if (stepId === "woolNap"){ els.woolNap.value = v; recomputeWoolAll(); return true; }
+  if (stepId === "woolYarn"){ els.woolYarn.value = v; recomputeWoolAll(); return true; }
+  if (stepId === "woolOrientation"){ els.woolOrientation.value = v; return true; }
+  if (stepId === "woolBacking"){ els.woolBacking.value = v; recomputeWoolStack(); return true; }
+  if (stepId === "woolPoly"){ els.woolPoly.value = v; recomputeWoolStack(); return true; }
+  if (stepId === "woolMil"){ els.woolMil.value = v; return true; }
+  if (stepId === "woolPrint"){ els.woolPrint.value = v; return true; }
+  return false;
+}
+
+function susoStepAllowsAutoSingle(stepId){
+  return stepId === "foamColor" || stepId === "foamThickness" || stepId === "foamPartColor" || stepId === "foamWheel"
+    || stepId === "foamPadSize" || stepId === "foamLoopType" || stepId === "foamHole"
+    || stepId === "woolPadSize" || stepId === "woolNap" || stepId === "woolYarn" || stepId === "woolOrientation"
+    || stepId === "woolBacking" || stepId === "woolPoly" || stepId === "woolMil" || stepId === "woolPrint";
+}
+
+function susoAutoFillSingleOptionSteps(){
+  const lines = [];
+  for (let g = 0; g < 24; g++){
+    const slot = getNextMissingSlot();
+    if (["complete", "need_load", "prodType", "identity", "foam_resolve", "wool_resolve"].indexOf(slot.stepId) >= 0) break;
+    if (!slot.options || slot.options.length !== 1) break;
+    if (!susoStepAllowsAutoSingle(slot.stepId)) break;
+    const only = slot.options[0];
+    if (!susoApplyStepValue(slot.stepId, only)) break;
+    if (currentMode === "wool") recomputeWoolStack();
+    const lab = susoStepShortLabel(slot.stepId);
+    lines.push("Only one option for **" + (lab || slot.stepId) + "** — set to **" + susoSanitizeForBoldEcho(only) + "**.");
+  }
+  return lines;
+}
+
+function susoBuildProgressLine(){
+  if (!wb) return "";
+  const parts = [];
+  if (currentMode === null){
+    return "**Progress:** Pick **foam** or **tufted wool**.";
+  }
+  if (currentMode === "foam") parts.push("Foam");
+  else parts.push("Tufted wool");
+  if (hasAnyName()){
+    const who = norm(els.reqName.value);
+    const sn = norm(els.sampleName.value);
+    const idBits = [];
+    if (who) idBits.push("req **" + susoSanitizeForBoldEcho(who.length > 24 ? who.slice(0, 21) + "…" : who) + "**");
+    if (sn) idBits.push("sample **" + susoSanitizeForBoldEcho(sn.length > 20 ? sn.slice(0, 17) + "…" : sn) + "**");
+    if (idBits.length) parts.push(idBits.join(", "));
+  } else {
+    parts.push("identity pending");
+  }
+  if (currentMode === "foam"){
+    if (els.foamColor.value) parts.push("color **" + susoSanitizeForBoldEcho(els.foamColor.value) + "**");
+    if (els.foamThickness.value) parts.push("thick **" + els.foamThickness.value + "**");
+    if (els.foamPartColor && els.foamPartColor.value && !els.foamPartColorRow.classList.contains("hidden")) parts.push("part **" + susoSanitizeForBoldEcho(els.foamPartColor.value) + "**");
+    if (els.foamWheel.value) parts.push("wheel **" + susoSanitizeForBoldEcho(els.foamWheel.value) + "**");
+    if (els.foamPadSize.value) parts.push("pad **" + els.foamPadSize.value + "**");
+    const q = parseInt(els.foamQty.value || "0", 10);
+    if (Number.isFinite(q) && q >= 1) parts.push("qty **" + q + "**");
+    if (els.foamLoopType.value) parts.push(els.foamLoopType.value);
+    if (els.foamHole.value) parts.push(els.foamHole.value);
+  } else if (currentMode === "wool"){
+    if (els.woolPadSize.value) parts.push("OD **" + els.woolPadSize.value + "**");
+    if (els.woolNap.value) parts.push("nap **" + els.woolNap.value + "**");
+    if (els.woolYarn.value) parts.push("yarn **" + susoSanitizeForBoldEcho(els.woolYarn.value) + "**");
+    if (els.woolOrientation.value) parts.push(els.woolOrientation.value);
+    if (els.woolBacking.value) parts.push("back **" + susoSanitizeForBoldEcho(els.woolBacking.value) + "**");
+    if (els.woolPoly.value) parts.push("poly **" + susoSanitizeForBoldEcho(els.woolPoly.value) + "**");
+    if (els.woolMil.value) parts.push("MIL **" + els.woolMil.value + "**");
+    if (els.woolPrint.value) parts.push("print **" + susoSanitizeForBoldEcho(els.woolPrint.value) + "**");
+  }
+  return "**Progress:** " + parts.join(" · ");
+}
+
+function susoAppendProgressLine(){
+  const line = susoBuildProgressLine();
+  if (line) appendChat("suso", line);
+}
+
+function susoTryUndoCommand(text){
+  const t = norm(text).toLowerCase();
+  if (!/^\s*(undo|revert)(\s+last)?\s*$/i.test(t)) return false;
+  if (!wb){
+    appendChat("suso", "Load the catalog first.");
+    return true;
+  }
+  if (!susoUndoSnapshot){
+    appendChat("suso", "Nothing to undo yet. (Say **undo** after you’ve answered a step.)");
+    susoCloseConfiguratorTurn({ awaitingAtStart: null, tryResult: { applied: true, value: null, step: null }, text: "", skipStuckHint: true });
+    return true;
+  }
+  susoRestoreFormSnapshot(susoUndoSnapshot);
+  susoUndoSnapshot = null;
+  appendChat("suso", "Reverted your **last** reply — selections are back to how they were before that message.");
+  susoCloseConfiguratorTurn({ awaitingAtStart: null, tryResult: { applied: true, value: null, step: null }, text: "", skipStuckHint: true });
+  return true;
+}
+
+function susoCloseConfiguratorTurn(ctx){
+  const awaitingAtStart = ctx.awaitingAtStart;
+  const tryResult = ctx.tryResult || { applied: false };
+  const text = ctx.text || "";
+  const skipStuckHint = !!ctx.skipStuckHint;
+
+  let slot = getNextMissingSlot();
+  const autoLines = susoAutoFillSingleOptionSteps();
+  for (const ln of autoLines) appendChat("suso", ln);
+  slot = getNextMissingSlot();
+  susoAwaitingStep = slot.stepId;
+
+  if (slot.stepId === "complete"){
+    appendChat("suso", slot.prompt);
+    susoAppendProgressLine();
+    return;
+  }
+  if (slot.stepId === "need_load") return;
+
+  const stillOnSameStep = awaitingAtStart != null && slot.stepId === awaitingAtStart;
+  const hasChoices = slot.options && slot.options.length > 0;
+  const looksLikeCommand = /^(export|download|bom|reset|validate|why|help|\?|what\s+options)/i.test(text.trim());
+  if (!skipStuckHint && stillOnSameStep && !(tryResult && tryResult.applied) && hasChoices && !looksLikeCommand && text.length < 240){
+    appendChat("suso", "I didn’t match that to the current question—pick one of the options below (or repeat the wording from the list).");
+  }
+
+  susoAppendProgressLine();
+  appendChat("suso", slot.prompt + formatOptionsForPrompt(slot.options));
+}
+
 function startSusoSession(){
   if (!els.chatLog) return;
   els.chatLog.innerHTML = "";
-  appendChat("suso", "Catalog is loaded. I’ll narrow this down step by step. First: are you ordering a **foam pad** or a **tufted wool** pad?");
+  appendChat("suso", "Catalog is loaded. I’ll narrow this down step by step. First: are you ordering a **foam pad** or a **tufted wool** pad? (You can say **undo** anytime to revert your **last** reply.)");
   susoAwaitingStep = "prodType";
+  susoUndoSnapshot = null;
 }
 
 function runSusoCommand(){
@@ -2447,6 +2656,10 @@ function runSusoCommand(){
   els.susoInput.value = "";
 
   const awaitingAtStart = susoAwaitingStep;
+
+  if (susoTryUndoCommand(text)) return;
+
+  const undoBeforeThisTurn = susoCaptureFormSnapshot();
 
   const rich = interpretIntentRichConfigurator(text);
   const exec = runConfiguratorAdapter(rich.routed);
@@ -2472,6 +2685,7 @@ function runSusoCommand(){
   }
 
   if (k === "reset_form"){
+    susoUndoSnapshot = null;
     appendChat("suso", exec.text || "Session reset. Continue below.");
     return;
   }
@@ -2530,23 +2744,8 @@ function runSusoCommand(){
     }
   }
 
-  const slot = getNextMissingSlot();
-  susoAwaitingStep = slot.stepId;
-
-  if (slot.stepId === "complete"){
-    appendChat("suso", slot.prompt);
-    return;
-  }
-  if (slot.stepId === "need_load") return;
-
-  const stillOnSameStep = awaitingAtStart && slot.stepId === awaitingAtStart;
-  const hasChoices = slot.options && slot.options.length > 0;
-  const looksLikeCommand = /^(export|download|bom|reset|validate|why|help|\?|what\s+options)/i.test(text.trim());
-  if (stillOnSameStep && !tryResult.applied && hasChoices && !looksLikeCommand && text.length < 240){
-    appendChat("suso", "I didn’t match that to the current question—pick one of the options below (or repeat the wording from the list).");
-  }
-
-  appendChat("suso", slot.prompt + formatOptionsForPrompt(slot.options));
+  susoUndoSnapshot = undoBeforeThisTurn;
+  susoCloseConfiguratorTurn({ awaitingAtStart, tryResult, text, skipStuckHint: false });
 }
 
 /***********************
