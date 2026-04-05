@@ -1590,9 +1590,8 @@ function susoEscapeRe(s){
 }
 
 /**
- * True if user text matches a catalog foam color. Slash composites (ORANGE/GREY) also match
- * "orange grey", "orange / grey", and either word order for two-part swatches.
- * Single-token colors use word boundaries so "orange grey" does not resolve to GREY alone.
+ * True if user text matches a catalog foam color. Any color in the loaded sheet is supported;
+ * two-tone swatches (BLUE/GREY, BLACK/GREY, …) use the same rules as ORANGE/GREY — not hardcoded.
  */
 function susoCatalogColorPhraseMatchesHay(hay, catalogColor){
   const hayLow = String(hay || "").toLowerCase();
@@ -2012,18 +2011,55 @@ function formatOptionsForPrompt(opts){
   return "\n\n" + opts.map((o, i) => (i + 1) + ". " + o).join("\n");
 }
 
+/**
+ * Match user text to a list option: #3 / option 3 = position; bare 3 = option whose *value* is 3
+ * (e.g. Final OD "3" not the third row). If no value matches, bare integer falls back to 1-based index.
+ */
+function susoMatchListOptionCore(low, options){
+  if (!options || !options.length) return null;
+  const l = String(low || "").toLowerCase();
+
+  const mHash = /^\s*#\s*(\d+)\s*$/.exec(l);
+  if (mHash){
+    const i = parseInt(mHash[1], 10) - 1;
+    if (i >= 0 && i < options.length) return options[i];
+  }
+  const mOpt = /^\s*(?:option|pick)\s*#?\s*(\d+)\s*$/i.exec(l);
+  if (mOpt){
+    const i = parseInt(mOpt[1], 10) - 1;
+    if (i >= 0 && i < options.length) return options[i];
+  }
+
+  for (const o of options){
+    const ou = norm(o).toLowerCase();
+    if (l === ou || ou === l) return o;
+  }
+
+  const numOnly = /^\s*(-?\d+(?:\.\d+)?|-?\.\d+)\s*$/i.exec(l);
+  if (numOnly){
+    const trimmed = numOnly[0].trim();
+    const want = toNum(trimmed);
+    if (want != null){
+      const valHits = options.filter(o => {
+        const on = toNum(o);
+        if (on != null && Math.abs(on - want) < 1e-9) return true;
+        return norm(o).toLowerCase() === l;
+      });
+      if (valHits.length) return valHits[0];
+    }
+    if (/^-?\d+$/.test(trimmed)){
+      const asInt = parseInt(trimmed, 10);
+      if (asInt >= 1 && asInt <= options.length) return options[asInt - 1];
+    }
+  }
+  return null;
+}
+
 function matchOptionFromUserText(text, options){
   if (!options || !options.length) return null;
   const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
-  if (mNum){
-    const i = parseInt(mNum[1], 10) - 1;
-    if (i >= 0 && i < options.length) return options[i];
-  }
-  for (const o of options){
-    const ou = norm(o).toLowerCase();
-    if (low === ou || ou === low) return o;
-  }
+  const core = susoMatchListOptionCore(low, options);
+  if (core) return core;
   for (const o of options){
     const ou = norm(o).toLowerCase();
     if (low.includes(ou) || ou.includes(low)) return o;
@@ -2035,16 +2071,9 @@ function matchOptionFromUserText(text, options){
 function matchFoamCatalogColorFromUserText(text, options){
   if (!options || !options.length) return null;
   const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
-  if (mNum){
-    const i = parseInt(mNum[1], 10) - 1;
-    if (i >= 0 && i < options.length) return options[i];
-  }
+  const core = susoMatchListOptionCore(low, options);
+  if (core) return core;
   const sorted = options.slice().sort((a, b) => norm(b).length - norm(a).length);
-  for (const o of sorted){
-    const ou = norm(o).toLowerCase();
-    if (low === ou || ou === low) return o;
-  }
   for (const o of sorted){
     if (susoCatalogColorPhraseMatchesHay(low, o)) return o;
   }
@@ -2070,15 +2099,8 @@ function susoResolveWoolPrintIntentPhrase(low){
 function matchWoolPrintFromUserText(text, options){
   if (!options || !options.length) return null;
   const low = susoNormalizeNumericText(norm(text)).toLowerCase();
-  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
-  if (mNum){
-    const i = parseInt(mNum[1], 10) - 1;
-    if (i >= 0 && i < options.length) return options[i];
-  }
-  for (const o of options){
-    const ou = norm(o).toLowerCase();
-    if (low === ou || ou === low) return o;
-  }
+  const core = susoMatchListOptionCore(low, options);
+  if (core) return core;
   const resolved = susoResolveWoolPrintIntentPhrase(low);
   if (resolved){
     const hit = options.find(o => norm(o).toLowerCase() === resolved.toLowerCase());
@@ -2295,7 +2317,11 @@ function getNextMissingSlot(){
 
   if (currentMode === "wool"){
     if (!els.woolPadSize.value){
-      return { stepId: "woolPadSize", prompt: "What **final pad size (Final OD)**?", options: uniqSorted(woolRows, "Final OD") };
+      return {
+        stepId: "woolPadSize",
+        prompt: "What **final pad size (Final OD)**? Type the size (e.g. **3** or **5.5**). For a **numbered** list below, use **#3** for line 3.",
+        options: uniqSorted(woolRows, "Final OD")
+      };
     }
     if (!els.woolNap.value){
       return { stepId: "woolNap", prompt: "Which **nap length**?", options: uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length") };
