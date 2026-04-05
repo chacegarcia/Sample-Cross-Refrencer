@@ -1989,6 +1989,32 @@ function matchOptionFromUserText(text, options){
   return null;
 }
 
+function susoStepShortLabel(stepId){
+  const map = {
+    prodType: "product type",
+    identity: "request / sample",
+    foamColor: "foam color",
+    foamThickness: "thickness",
+    foamPartColor: "part color",
+    foamWheel: "wheel",
+    foamPadSize: "pad size",
+    foamQty: "quantity",
+    foamLoopType: "loop type",
+    foamHole: "hole",
+    foamNotes: "foam notes",
+    woolPadSize: "pad size (Final OD)",
+    woolNap: "nap length",
+    woolYarn: "yarn",
+    woolOrientation: "orientation",
+    woolBacking: "backing",
+    woolPoly: "poly",
+    woolMil: "MIL",
+    woolPrint: "print",
+    woolNotes: "wool notes"
+  };
+  return map[stepId] || "";
+}
+
 function tryParseIdentityLine(text){
   const t = norm(text);
   if (!t) return;
@@ -2013,16 +2039,31 @@ function tryParseIdentityLine(text){
 }
 
 function tryApplyStepAnswer(text, step){
-  if (!step || !wb) return;
+  const none = () => ({ applied: false, value: null, step: step || null });
+  if (!step || !wb) return none();
   const low = norm(text).toLowerCase();
   if (step === "prodType"){
-    if (/\bfoam\b/.test(low) && !/\btufted\s+wool\b/.test(low)) applyProdType("foam");
-    else if (/\bwool\b/.test(low) || /\btufted\b/.test(low)) applyProdType("wool");
-    return;
+    if (/\bfoam\b/.test(low) && !/\btufted\s+wool\b/.test(low)){
+      applyProdType("foam");
+      return { applied: true, value: "Foam pad", step: "prodType" };
+    }
+    if (/\bwool\b/.test(low) || /\btufted\b/.test(low)){
+      applyProdType("wool");
+      return { applied: true, value: "Tufted wool pad", step: "prodType" };
+    }
+    return none();
   }
   if (step === "identity"){
+    const beforeReq = els.reqName.value;
+    const beforeSamp = els.sampleName.value;
     tryParseIdentityLine(text);
-    return;
+    if (els.reqName.value !== beforeReq || els.sampleName.value !== beforeSamp){
+      const parts = [];
+      if (els.reqName.value) parts.push("requested by " + els.reqName.value);
+      if (els.sampleName.value) parts.push("sample " + els.sampleName.value);
+      return { applied: true, value: parts.join(", "), step: "identity" };
+    }
+    return none();
   }
 
   let opts = [];
@@ -2058,29 +2099,41 @@ function tryApplyStepAnswer(text, step){
     pick = matchOptionFromUserText(scrubbedAnswer, opts);
   }
 
-  if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return; }
-  if (step === "foamThickness" && pick){ els.foamThickness.value = pick; recomputeFoam(); return; }
-  if (step === "foamPartColor" && pick){ els.foamPartColor.value = pick; recomputeFoam(); return; }
-  if (step === "foamWheel" && pick){ els.foamWheel.value = pick; recomputeFoam(); return; }
-  if (step === "foamPadSize" && pick){ els.foamPadSize.value = pick; recomputeFoam(); return; }
+  if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
+  if (step === "foamThickness" && pick){ els.foamThickness.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
+  if (step === "foamPartColor" && pick){ els.foamPartColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
+  if (step === "foamWheel" && pick){ els.foamWheel.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
+  if (step === "foamPadSize" && pick){ els.foamPadSize.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
   if (step === "foamQty"){
-    const q = parseInt(text, 10);
-    if (Number.isFinite(q) && q >= 1) els.foamQty.value = String(q);
-    return;
+    const q = parseInt(String(text).replace(/,/g, "").trim(), 10);
+    if (Number.isFinite(q) && q >= 1){
+      els.foamQty.value = String(q);
+      return { applied: true, value: String(q), step };
+    }
+    return none();
   }
-  if (step === "foamLoopType" && pick){ els.foamLoopType.value = pick; return; }
-  if (step === "foamHole" && pick){ els.foamHole.value = pick; return; }
-  if (step === "foamNotes"){ els.foamNotes.value = norm(text); return; }
+  if (step === "foamLoopType" && pick){ els.foamLoopType.value = pick; return { applied: true, value: pick, step }; }
+  if (step === "foamHole" && pick){ els.foamHole.value = pick; return { applied: true, value: pick, step }; }
+  if (step === "foamNotes"){
+    const v = norm(text);
+    if (v){ els.foamNotes.value = v; return { applied: true, value: v.length > 80 ? v.slice(0, 77) + "…" : v, step }; }
+    return none();
+  }
 
-  if (step === "woolPadSize" && pick){ els.woolPadSize.value = pick; recomputeWoolAll(); return; }
-  if (step === "woolNap" && pick){ els.woolNap.value = pick; recomputeWoolAll(); return; }
-  if (step === "woolYarn" && pick){ els.woolYarn.value = pick; recomputeWoolAll(); return; }
-  if (step === "woolOrientation" && pick){ els.woolOrientation.value = pick; return; }
-  if (step === "woolBacking" && pick){ els.woolBacking.value = pick; recomputeWoolStack(); return; }
-  if (step === "woolPoly" && pick){ els.woolPoly.value = pick; recomputeWoolStack(); return; }
-  if (step === "woolMil" && pick){ els.woolMil.value = pick; return; }
-  if (step === "woolPrint" && pick){ els.woolPrint.value = pick; return; }
-  if (step === "woolNotes"){ els.woolNotes.value = norm(text); return; }
+  if (step === "woolPadSize" && pick){ els.woolPadSize.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
+  if (step === "woolNap" && pick){ els.woolNap.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
+  if (step === "woolYarn" && pick){ els.woolYarn.value = pick; recomputeWoolAll(); return { applied: true, value: pick, step }; }
+  if (step === "woolOrientation" && pick){ els.woolOrientation.value = pick; return { applied: true, value: pick, step }; }
+  if (step === "woolBacking" && pick){ els.woolBacking.value = pick; recomputeWoolStack(); return { applied: true, value: pick, step }; }
+  if (step === "woolPoly" && pick){ els.woolPoly.value = pick; recomputeWoolStack(); return { applied: true, value: pick, step }; }
+  if (step === "woolMil" && pick){ els.woolMil.value = pick; return { applied: true, value: pick, step }; }
+  if (step === "woolPrint" && pick){ els.woolPrint.value = pick; return { applied: true, value: pick, step }; }
+  if (step === "woolNotes"){
+    const v = norm(text);
+    if (v){ els.woolNotes.value = v; return { applied: true, value: v.length > 80 ? v.slice(0, 77) + "…" : v, step }; }
+    return none();
+  }
+  return none();
 }
 
 function getNextMissingSlot(){
@@ -2194,6 +2247,8 @@ function runSusoCommand(){
   appendChat("user", text);
   els.susoInput.value = "";
 
+  const awaitingAtStart = susoAwaitingStep;
+
   const rich = interpretIntentRichConfigurator(text);
   const exec = runConfiguratorAdapter(rich.routed);
 
@@ -2233,8 +2288,10 @@ function runSusoCommand(){
     return;
   }
 
+  let setFieldsPayload = null;
   if (k === "set_fields"){
     const p = rich.routed.payload || {};
+    setFieldsPayload = p;
     const f = Object.assign({}, p.fields);
     delete f._thicknessNum;
     delete f._padNum;
@@ -2244,13 +2301,28 @@ function runSusoCommand(){
     if (susoAwaitingStep !== "foamHole" && !exHole) delete f.foamHole;
 
     applyConfiguratorFields(f);
-    if (p.inferenceNotes && p.inferenceNotes.length) appendChat("suso", p.inferenceNotes.join(" "));
-    if (p.clarifications && p.clarifications.length) appendChat("suso", "Note: " + p.clarifications.join(" "));
   }
 
   if (currentMode === "wool") recomputeWoolStack();
 
-  tryApplyStepAnswer(text, susoAwaitingStep);
+  const tryResult = tryApplyStepAnswer(text, awaitingAtStart);
+
+  if (k === "set_fields" && setFieldsPayload){
+    const p = setFieldsPayload;
+    const directStepWins = tryResult.applied && tryResult.step === awaitingAtStart;
+    if (!directStepWins && p.inferenceNotes && p.inferenceNotes.length){
+      appendChat("suso", p.inferenceNotes.join(" "));
+    }
+    if (!directStepWins && p.clarifications && p.clarifications.length){
+      appendChat("suso", "Note: " + p.clarifications.join(" "));
+    }
+  }
+
+  if (tryResult.applied && tryResult.value){
+    const lab = susoStepShortLabel(tryResult.step);
+    const tail = lab ? " (" + lab + ")" : "";
+    appendChat("suso", "Got it — **" + tryResult.value + "**" + tail + ".");
+  }
 
   const slot = getNextMissingSlot();
   susoAwaitingStep = slot.stepId;
