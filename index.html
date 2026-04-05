@@ -1495,15 +1495,57 @@ function susoExtractRequestedBy(low, raw){
   return null;
 }
 
+/** Normalize European decimals (0,875) before parsing so we don't get 0 and 875 as two tokens. */
+function susoNormalizeNumericText(s){
+  return String(s || "").replace(/\b(\d+),(\d+)\b/g, "$1.$2");
+}
+
 function susoExtractNumbersForFoam(low){
+  const s = susoNormalizeNumericText(low);
   const nums = [];
-  const re = /\b(\d+(?:\.\d+)?)\s*(?:inch|in|\")?\b/gi;
+  const re = /\b(\d+(?:\.\d+)?)\b/gi;
   let x;
-  while ((x = re.exec(low)) !== null){
+  while ((x = re.exec(s)) !== null){
     const n = parseFloat(x[1]);
     if (Number.isFinite(n)) nums.push({ value: n, index: x.index });
   }
   return nums;
+}
+
+/**
+ * Infer _thicknessNum vs _padNum using context (inch/pad/thick keywords and magnitude).
+ * Avoids treating 5.5" pad as thickness or 0,875 as pad 875.
+ */
+function susoInferFoamThicknessAndPad(low, raw, nums, fields){
+  const r = susoNormalizeNumericText(String(raw || "")).toLowerCase();
+  const l = susoNormalizeNumericText(String(low || "")).toLowerCase();
+
+  const inchPadMatch = /\b(\d+(?:\.\d+)?)\s*(?:inch|inches|in\b|"|')\b/i.exec(r);
+  if (inchPadMatch){
+    const v = parseFloat(inchPadMatch[1]);
+    if (Number.isFinite(v) && v >= 1){ fields._padNum = v; return; }
+  }
+
+  if (!nums.length) return;
+
+  if (nums.length >= 2){
+    const vals = nums.map(n => n.value).sort((a, b) => a - b);
+    const sm = vals[0];
+    const lg = vals[vals.length - 1];
+    if (sm < 2.25 && lg >= 2){ fields._thicknessNum = sm; fields._padNum = lg; return; }
+  }
+
+  if (nums.length === 1){
+    const v = nums[0].value;
+    if (v >= 2.25 && v <= 48){
+      fields._padNum = v;
+      return;
+    }
+    if (v > 0 && v < 2.25){
+      fields._thicknessNum = v;
+      return;
+    }
+  }
 }
 
 function pickMatchingOption(want, options){
@@ -1516,14 +1558,44 @@ function pickMatchingOption(want, options){
   return null;
 }
 
-/** Remove loop / finished-pad phrases so "white" in "white loop" is not mistaken for foam color WHITE. */
+/**
+ * Strip phrases whose English words overlap foam *color* tokens (e.g. "white" in "white loop", "no" in "no print")
+ * so NL does not set the wrong field. Does not remove generic color words when they stand alone.
+ */
 function susoScrubForFoamColorScan(s){
   return String(s || "")
     .replace(/\bwhite\s+loop\b/gi, " ")
     .replace(/\bblack\s+loop\b/gi, " ")
     .replace(/\bno\s+loop\b/gi, " ")
     .replace(/\bwith\s+hole\b/gi, " ")
-    .replace(/\bno\s+hole\b/gi, " ");
+    .replace(/\bno\s+hole\b/gi, " ")
+    .replace(/\bno\s+print\b/gi, " ")
+    .replace(/\blc\s+print\b/gi, " ")
+    .replace(/\bcustomer\s+sample\s+print\b/gi, " ")
+    .replace(/\bcurved\b/gi, " ")
+    .replace(/\bflat\b/gi, " ")
+    .replace(/\bloop\s+backing\b/gi, " ")
+    .replace(/\bcanvas\s+backing\b/gi, " ");
+}
+
+/** Longest / composite swatches first so BLUE/GREY wins over BLUE; WHITE/TEAL over WHITE. */
+function susoMatchFoamCatalogColor(lowScrubbed){
+  if (!foamRows.length || !String(lowScrubbed || "").trim()) return null;
+  const colors = uniqSorted(foamRows, COL.foam_color)
+    .slice()
+    .sort((a, b) => norm(b).length - norm(a).length);
+  const hay = String(lowScrubbed);
+  for (const c of colors){
+    const lc = norm(c).toLowerCase();
+    if (lc.length < 2) continue;
+    if (lc.includes("/")){
+      const flex = lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "\\s*\\/\\s*");
+      if (new RegExp(flex, "i").test(hay)) return c;
+    } else {
+      if (new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(hay)) return c;
+    }
+  }
+  return null;
 }
 
 function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
@@ -1545,16 +1617,8 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   if (semantic.printType) fields.woolPrint = semantic.printType;
 
   const lowForFoamColor = susoScrubForFoamColorScan(low);
-  if (foamRows.length){
-    const colors = uniqSorted(foamRows, COL.foam_color);
-    for (const c of colors){
-      const lc = norm(c).toLowerCase();
-      if (lc.length > 1 && new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(lowForFoamColor)){
-        fields.foamColor = c;
-        break;
-      }
-    }
-  }
+  const matchedFoamColor = susoMatchFoamCatalogColor(lowForFoamColor);
+  if (matchedFoamColor) fields.foamColor = matchedFoamColor;
 
   const nums = susoExtractNumbersForFoam(low);
   const woolish = semantic.productType === "wool" || fields.prodType === "wool"
@@ -1562,16 +1626,10 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     || (/\bwool\b/.test(low) && !/\bfoam\s+pad\b/.test(low) && !/\bfoam\b/.test(low));
 
   if (!woolish && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
-    const dec = nums.filter(n => /^\d+\.\d+$/.test(String(n.value)) || (n.value < 2 && n.value % 1 !== 0));
-    const whole = nums.filter(n => n.value >= 2 || n.value === Math.floor(n.value));
-    if (dec.length === 1) fields._thicknessNum = dec[0].value;
-    if (whole.length){
-      const padCandidate = whole[whole.length - 1].value;
-      fields._padNum = padCandidate;
-    } else if (nums.length === 1 && !fields._thicknessNum){
-      const n0 = nums[0].value;
-      if (n0 < 2 && n0 % 1 !== 0) fields._thicknessNum = n0;
-      else fields._padNum = n0;
+    susoInferFoamThicknessAndPad(low, raw, nums, fields);
+    if (fields._thicknessNum != null && fields._thicknessNum >= 2.25){
+      fields._padNum = fields._thicknessNum;
+      delete fields._thicknessNum;
     }
   }
 
@@ -1581,7 +1639,7 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
       : uniqSorted(foamRows, COL.foam_thickness);
     const matchThk = thkOpts.map(t => ({ t, n: toNum(t) })).find(o => o.n !== null && Math.abs(o.n - fields._thicknessNum) < 1e-6);
     if (matchThk) fields.foamThickness = matchThk.t;
-    else {
+    else if (fields._thicknessNum < 2.5){
       notes.push("Thickness " + fields._thicknessNum + " not in current option list (after color context).");
       clarifications.push("Pick thickness from the list or adjust color first.");
     }
@@ -1596,7 +1654,7 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     }
   }
 
-  if (!woolish && fields._padNum != null && geoRows.length){
+  if (!woolish && fields._padNum != null && geoRows.length && fields._padNum < 72){
     const wheel = els.foamWheel.value;
     const pads = wheel
       ? splitMaybeComma(uniqSorted(geoRowsByWheel(wheel), COL.geo_padSizes).join(","))
@@ -1605,9 +1663,9 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     const hit = pads.find(p => Math.abs(toNum(p) - fields._padNum) < 1e-6 || normU(p) === normU(asStr))
       || pads.find(p => norm(p).includes(asStr));
     if (hit) fields.foamPadSize = hit;
-    else {
-      notes.push("Pad size " + fields._padNum + " not matched to loaded geometry yet (need wheel/thickness context).");
-      clarifications.push("Select wheel first if pad list is empty; then pick pad size from dropdown.");
+    else if (fields._padNum <= 24){
+      notes.push("Pad size " + fields._padNum + " not matched yet (pick **wheel** first if you haven’t).");
+      clarifications.push("We’ll confirm pad size after wheel.");
     }
   }
 
@@ -1914,7 +1972,7 @@ function formatOptionsForPrompt(opts){
 
 function matchOptionFromUserText(text, options){
   if (!options || !options.length) return null;
-  const low = norm(text).toLowerCase();
+  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
   const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
   if (mNum){
     const i = parseInt(mNum[1], 10) - 1;
@@ -1994,7 +2052,11 @@ function tryApplyStepAnswer(text, step){
   else if (step === "woolPoly") opts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
   else if (step === "woolMil") opts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
 
-  const pick = opts.length ? matchOptionFromUserText(text, opts) : null;
+  let pick = opts.length ? matchOptionFromUserText(text, opts) : null;
+  if (step === "foamColor" && opts.length){
+    const scrubbedAnswer = susoScrubForFoamColorScan(norm(text).toLowerCase());
+    pick = matchOptionFromUserText(scrubbedAnswer, opts);
+  }
 
   if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return; }
   if (step === "foamThickness" && pick){ els.foamThickness.value = pick; recomputeFoam(); return; }
@@ -2176,6 +2238,11 @@ function runSusoCommand(){
     const f = Object.assign({}, p.fields);
     delete f._thicknessNum;
     delete f._padNum;
+    const exLoop = /white\s+loop|black\s+loop|no\s+loop/i.test(text);
+    const exHole = /\b(with\s+hole|no\s+hole)\b/i.test(text);
+    if (susoAwaitingStep !== "foamLoopType" && !exLoop) delete f.foamLoopType;
+    if (susoAwaitingStep !== "foamHole" && !exHole) delete f.foamHole;
+
     applyConfiguratorFields(f);
     if (p.inferenceNotes && p.inferenceNotes.length) appendChat("suso", p.inferenceNotes.join(" "));
     if (p.clarifications && p.clarifications.length) appendChat("suso", "Note: " + p.clarifications.join(" "));
