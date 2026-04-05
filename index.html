@@ -1145,6 +1145,20 @@ function wheelsForThickness(thkVal){
   return Array.from(wheels).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true, sensitivity:"base"}));
 }
 
+/** Numeric thickness values (inches) that appear in geo for this wheel across THK_* columns. */
+function thicknessesForWheel(wheelVal){
+  const w = normU(wheelVal);
+  if (!geoRows.length || !THK_MAP.size) return [];
+  const found = new Set();
+  for (const r of geoRows){
+    if (normU(r[COL.geo_wheel]) !== w) continue;
+    for (const [n, col] of THK_MAP.entries()){
+      if (isTruthy(r[col])) found.add(n);
+    }
+  }
+  return Array.from(found).sort((a, b) => a - b);
+}
+
 /***********************
  * FOAM
  ***********************/
@@ -1675,6 +1689,42 @@ function susoInferWoolPadSizeFromContext(low, raw, ods){
   return null;
 }
 
+/**
+ * If foam color + wheel already imply a single catalog thickness for this color, set it.
+ * Skips when thickness was set from numbers or user text elsewhere.
+ */
+function susoInferFoamThicknessWhenUniqueForColorAndWheel(fields){
+  if (fields.foamThickness || !fields.foamWheel || !fields.foamColor) return;
+  const nums = thicknessesForWheel(fields.foamWheel);
+  if (!nums.length) return;
+  const foamOpts = uniqSorted(foamRowsByColor(fields.foamColor), COL.foam_thickness);
+  const candidates = foamOpts.filter(t => {
+    const n = toNum(t);
+    return n !== null && nums.some(bw => Math.abs(bw - n) < 1e-9);
+  });
+  if (candidates.length === 1) fields.foamThickness = candidates[0];
+}
+
+/** After wheel (and color) are on the form: auto-set thickness when geo ∩ foam leaves one choice. */
+function susoTryApplyUniqueFoamThicknessFromWheel(){
+  if (currentMode !== "foam" || !foamRows.length || !geoRows.length) return null;
+  if (els.foamThickness && els.foamThickness.value) return null;
+  const color = els.foamColor ? els.foamColor.value : "";
+  const wheel = els.foamWheel ? els.foamWheel.value : "";
+  if (!color || !wheel) return null;
+  const nums = thicknessesForWheel(wheel);
+  if (!nums.length) return null;
+  const foamOpts = uniqSorted(foamRowsByColor(color), COL.foam_thickness);
+  const candidates = foamOpts.filter(t => {
+    const n = toNum(t);
+    return n !== null && nums.some(bw => Math.abs(bw - n) < 1e-9);
+  });
+  if (candidates.length !== 1) return null;
+  els.foamThickness.value = candidates[0];
+  recomputeFoam();
+  return candidates[0];
+}
+
 function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   const fields = {};
   const notes = [];
@@ -1732,6 +1782,10 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
       notes.push("Thickness " + fields._thicknessNum + " not in current option list (after color context).");
       clarifications.push("Pick thickness from the list or adjust color first.");
     }
+  }
+
+  if (!woolish && foamRows.length && geoRows.length){
+    susoInferFoamThicknessWhenUniqueForColorAndWheel(fields);
   }
 
   let woolOdMeta = null;
@@ -2734,6 +2788,14 @@ function runSusoCommand(){
   if (currentMode === "wool") recomputeWoolStack();
 
   const tryResult = tryApplyStepAnswer(text, awaitingAtStart);
+
+  if (currentMode === "foam"){
+    recomputeFoam();
+    const foamThkAuto = susoTryApplyUniqueFoamThicknessFromWheel();
+    if (foamThkAuto){
+      appendChat("suso", "Only one **thickness** matches this **color + wheel** — set to **" + susoSanitizeForBoldEcho(String(foamThkAuto)) + "**.");
+    }
+  }
 
   if (k === "set_fields" && setFieldsPayload){
     const p = setFieldsPayload;
