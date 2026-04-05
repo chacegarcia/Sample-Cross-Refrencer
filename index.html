@@ -1285,9 +1285,16 @@ const SUSO_PHRASE_PACK_CONFIGURATOR = [
   { phrase: "poly type", category: "field", canonical: "woolPoly", pack: "lcm" },
   { phrase: "sturdyness", category: "field", canonical: "woolMil", pack: "lcm" },
   { phrase: "mil", category: "field", canonical: "woolMil", pack: "lcm" },
+  { phrase: "my custom print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "customer sample print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "custom print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "custom artwork", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "my logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "our logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "customer logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "their logo", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
   { phrase: "lc print", category: "print_type", canonical: "LC Print", pack: "lcm" },
   { phrase: "no print", category: "print_type", canonical: "No Print", pack: "lcm" },
-  { phrase: "customer sample print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
   { phrase: "curved", category: "orientation", canonical: "Curved", pack: "lcm" },
   { phrase: "flat", category: "orientation", canonical: "Flat", pack: "lcm" },
   { phrase: "requested by", category: "field", canonical: "reqName", pack: "lcm" },
@@ -1649,6 +1656,11 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   const woolish = semantic.productType === "wool" || fields.prodType === "wool"
     || /\btufted\s+wool\b|\bwool\s+pad\b/.test(low)
     || (/\bwool\b/.test(low) && !/\bfoam\s+pad\b/.test(low) && !/\bfoam\b/.test(low));
+
+  if (!fields.woolPrint && (woolish || currentMode === "wool")){
+    const wp = susoResolveWoolPrintIntentPhrase(low);
+    if (wp) fields.woolPrint = wp;
+  }
 
   if (!woolish && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
     susoInferFoamThicknessAndPad(low, raw, nums, fields);
@@ -2039,6 +2051,42 @@ function matchFoamCatalogColorFromUserText(text, options){
   return null;
 }
 
+/**
+ * Map loose customer wording to catalog print options (tufted wool).
+ * Order: explicit "no print" first, then LC, then customer / custom / logo.
+ */
+function susoResolveWoolPrintIntentPhrase(low){
+  const l = String(low || "").toLowerCase();
+  if (!l.trim()) return null;
+  if (/\b(no\s+print|without\s+print|unprinted)\b/i.test(l)) return "No Print";
+  if (/\bno\s+logo\b/i.test(l)) return "No Print";
+  if (/\blc\s+print\b/i.test(l)) return "LC Print";
+  if (/^\s*lc\s*$/i.test(l.trim())) return "LC Print";
+  if (/\b(my\s+logo|our\s+logo|their\s+logo|customer\s+logo|custom\s+print|my\s+custom\s+print|my\s+custom\b|customer\s+sample|customer\s+art|supplied\s+art|branded|custom\s+artwork|artwork\s+from\s+customer|their\s+artwork)\b/i.test(l)) return "Customer Sample Print";
+  if (/\b(logo|artwork)\b/i.test(l) && !/\bno\s+(print|logo)\b/i.test(l)) return "Customer Sample Print";
+  return null;
+}
+
+function matchWoolPrintFromUserText(text, options){
+  if (!options || !options.length) return null;
+  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
+  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
+  if (mNum){
+    const i = parseInt(mNum[1], 10) - 1;
+    if (i >= 0 && i < options.length) return options[i];
+  }
+  for (const o of options){
+    const ou = norm(o).toLowerCase();
+    if (low === ou || ou === low) return o;
+  }
+  const resolved = susoResolveWoolPrintIntentPhrase(low);
+  if (resolved){
+    const hit = options.find(o => norm(o).toLowerCase() === resolved.toLowerCase());
+    if (hit) return hit;
+  }
+  return matchOptionFromUserText(text, options);
+}
+
 function susoStepShortLabel(stepId){
   const map = {
     prodType: "product type",
@@ -2147,6 +2195,8 @@ function tryApplyStepAnswer(text, step){
   if (step === "foamColor" && opts.length){
     const scrubbedAnswer = susoScrubForFoamColorScan(norm(text).toLowerCase());
     pick = matchFoamCatalogColorFromUserText(scrubbedAnswer, opts);
+  } else if (step === "woolPrint" && opts.length){
+    pick = matchWoolPrintFromUserText(text, opts);
   }
 
   if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
@@ -2272,7 +2322,11 @@ function getNextMissingSlot(){
       return { stepId: "woolMil", prompt: "Which **MIL (sturdyness)**?", options: milOpts };
     }
     if (!els.woolPrint.value){
-      return { stepId: "woolPrint", prompt: "Which **print**?", options: ["No Print", "LC Print", "Customer Sample Print"] };
+      return {
+        stepId: "woolPrint",
+        prompt: "Which **print**? You can say **no print**, **LC print**, or **my logo** / **custom print** (customer-supplied artwork).",
+        options: ["No Print", "LC Print", "Customer Sample Print"]
+      };
     }
     if (!resolveWoolBase() || !resolveWoolStackFinal()){
       return { stepId: "wool_resolve", prompt: "That combination doesn’t narrow to one stack row yet. Try different **backing / poly / MIL** choices that appear in the list.", options: [] };
