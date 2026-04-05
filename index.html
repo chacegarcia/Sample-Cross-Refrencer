@@ -200,13 +200,124 @@
       box-shadow: 0 0 0 3px rgba(185,28,28,.18) !important;
       background: rgba(185,28,28,.03) !important;
     }
+
+    .nl-bar{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:stretch;
+      margin-top:10px;
+    }
+    .nl-bar input[type="text"]{
+      flex:1;
+      min-width:220px;
+    }
+    .nl-reply{
+      margin-top:12px;
+      padding:12px;
+      border-radius: var(--radius-sm);
+      border:1px solid var(--line);
+      background: rgba(29,78,216,.04);
+      font-size: 14px;
+      color: #0f172a;
+      white-space: pre-wrap;
+    }
+    .nl-reply.muted-only{ background:#f8fafc; color: var(--muted); }
+    details.suso-trace{
+      margin-top:10px;
+      border:1px solid var(--line);
+      border-radius: var(--radius-sm);
+      background:#fff;
+    }
+    details.suso-trace > summary{
+      cursor:pointer;
+      padding:10px 12px;
+      font-weight:650;
+      font-size:13px;
+      color:#0b1220;
+    }
+    details.suso-trace pre{
+      display:block;
+      margin:0;
+      border-radius:0 0 var(--radius-sm) var(--radius-sm);
+      max-height: 320px;
+    }
+
+    .chat-wrap{
+      display:flex;
+      flex-direction:column;
+      min-height: 420px;
+      max-height: min(72vh, 640px);
+      border:1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      overflow: hidden;
+    }
+    .chat-log{
+      flex:1;
+      overflow-y: auto;
+      padding: 14px;
+      display:flex;
+      flex-direction:column;
+      gap: 12px;
+    }
+    .msg{
+      max-width: 92%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+    }
+    .msg.user{
+      align-self: flex-end;
+      background: var(--accent-soft);
+      border: 1px solid rgba(29,78,216,.22);
+      color: #0f172a;
+    }
+    .msg.suso{
+      align-self: flex-start;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      color: #0f172a;
+    }
+    .msg.suso strong{ color: #0b1220; }
+    .msg.sys{
+      align-self: center;
+      font-size: 12px;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      padding: 4px 8px;
+    }
+    .chat-input-row{
+      display:flex;
+      gap:10px;
+      padding: 12px;
+      border-top: 1px solid var(--line);
+      background: #fafbfc;
+    }
+    .chat-input-row input[type="text"]{
+      flex:1;
+      min-width:0;
+    }
+    #hiddenFormHost{
+      position:absolute;
+      width:1px;
+      height:1px;
+      padding:0;
+      margin:-1px;
+      overflow:hidden;
+      clip:rect(0,0,0,0);
+      border:0;
+    }
   </style>
 </head>
 
 <body>
   <div class="wrap">
     <h2>LCM Sample Configurator</h2>
-    <div class="muted">Enter in your requested part, and this will cross refrence with BOM items.</div>
+    <p class="muted" style="margin:0 0 14px;">Suso is your selector: it asks targeted questions until your sample is fully resolved. Sign in, load the catalog, then answer in plain language.</p>
 
     <div class="card">
       <div class="inline">
@@ -214,8 +325,34 @@
         <span id="status" class="pill">Not loaded</span>
         <button id="btnReset" class="btn-ghost" disabled>Reset</button>
       </div>
+    </div>
 
-      <div class="grid" style="margin-top:12px;">
+    <div class="card">
+      <h3 style="margin:0 0 6px;">Conversation</h3>
+      <div class="muted" style="font-size:13px; margin-bottom:10px;">Suso narrows options using the same rules as before—selections are driven here, not by separate dropdowns.</div>
+      <div class="chat-wrap">
+        <div id="chatLog" class="chat-log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="chat-input-row">
+          <input type="text" id="susoInput" placeholder="Load data first, then answer Suso’s questions…" disabled autocomplete="off">
+          <button type="button" id="btnSusoRun" class="btn-primary" disabled>Send</button>
+        </div>
+      </div>
+      <details class="suso-trace" id="susoTraceWrap" style="margin-top:12px;">
+        <summary>Suso trace (phrases · slots · domain · request)</summary>
+        <pre id="susoTrace">—</pre>
+      </details>
+    </div>
+
+    <div class="card">
+      <div class="inline">
+        <button id="btnDownload" class="btn-primary" disabled>Download BOM (.xlsx)</button>
+      </div>
+      <pre id="debug" style="display:none;">—</pre>
+    </div>
+
+    <div id="hiddenFormHost">
+    <div class="card" style="margin:0;padding:0;border:none;box-shadow:none;">
+      <div class="grid" style="margin-top:0;">
         <div class="row" id="rowReqName">
           <label for="reqName">Requested By</label>
           <input id="reqName" placeholder="e.g., Chace Garcia">
@@ -230,7 +367,7 @@
     <div class="card" id="typeCard">
       <h3 style="margin:0 0 10px;">Product Type</h3>
       <div class="seg" role="tablist" aria-label="Product Type">
-        <input id="ptFoam" type="radio" name="prodType" value="foam" checked>
+        <input id="ptFoam" type="radio" name="prodType" value="foam">
         <label for="ptFoam">Foam Pad</label>
         <input id="ptWool" type="radio" name="prodType" value="wool">
         <label for="ptWool">Tufted Wool Pad</label>
@@ -359,12 +496,6 @@
       </div>
     </div>
 
-    <div class="card">
-      <div class="inline">
-        <!-- Only disabled until data is loaded. Export click handles validation -->
-        <button id="btnDownload" class="btn-primary">Download BOM (.xlsx)</button>
-      </div>
-      <pre id="debug" visibility="hidden">—</pre>
     </div>
 
 <script>
@@ -633,7 +764,15 @@ const els = {
   woolMil: $("woolMil"),
   woolPrint: $("woolPrint"),
   woolNotes: $("woolNotes"),
+
+  susoInput: $("susoInput"),
+  btnSusoRun: $("btnSusoRun"),
+  susoTrace: $("susoTrace"),
+  chatLog: $("chatLog"),
 };
+
+const susoAgentMode = true;
+let susoAwaitingStep = null;
 
 function setStatus(text, ok=null){
   if (!els.status) return;
@@ -718,6 +857,10 @@ function validateForExport(){
   if (!wb) {
     setStatus("Load data first.", false);
     return { ok:false, msg:"Load data first." };
+  }
+
+  if (!currentMode){
+    return { ok:false, msg:"Choose foam pad or tufted wool first." };
   }
 
   // require at least one of these
@@ -891,12 +1034,21 @@ function recomputeWoolAll(){
 /***********************
  * MODE
  ***********************/
-let currentMode = "foam";
+let currentMode = null;
 function updateMode(){
-  const type = document.querySelector('input[name="prodType"]:checked')?.value || "foam";
+  const el = document.querySelector('input[name="prodType"]:checked');
+  const type = el ? el.value : null;
   currentMode = type;
-  document.getElementById("foamCard").style.display = (type==="foam") ? "" : "none";
-  document.getElementById("woolCard").style.display = (type==="wool") ? "" : "none";
+  if (type === "foam"){
+    document.getElementById("foamCard").style.display = "";
+    document.getElementById("woolCard").style.display = "none";
+  } else if (type === "wool"){
+    document.getElementById("foamCard").style.display = "none";
+    document.getElementById("woolCard").style.display = "";
+  } else {
+    document.getElementById("foamCard").style.display = "none";
+    document.getElementById("woolCard").style.display = "none";
+  }
   updateDebugAndButtons();
 }
 
@@ -1088,6 +1240,948 @@ function updateDebugAndButtons(){
 }
 
 /***********************
+ * Suso core (reusable NL layer) + configurator phrase pack + adapter
+ * Extracted patterns: phrase/chunk scan, semantic slots, domain, routing, trace.
+ * Workbook/data-sheet Q&A: domain 'document_query' + adapter stub (see execute path).
+ ***********************/
+
+/** Future Excel / data-sheet attributes (shared document phrase pack). */
+const SUSO_PHRASE_PACK_DOCUMENT = [
+  { phrase: "pressure rating", category: "attribute", canonical: "pressure rating", pack: "document" },
+  { phrase: "operating temperature", category: "attribute", canonical: "operating temperature", pack: "document" },
+  { phrase: "tensile strength", category: "attribute", canonical: "tensile strength", pack: "document" },
+  { phrase: "hardness", category: "attribute", canonical: "hardness", pack: "document" },
+  { phrase: "dimensions", category: "attribute", canonical: "dimensions", pack: "document" },
+  { phrase: "chemical resistance", category: "attribute", canonical: "chemical resistance", pack: "document" },
+  { phrase: "part number", category: "attribute", canonical: "part number", pack: "document" },
+  { phrase: "model number", category: "attribute", canonical: "model number", pack: "document" },
+  { phrase: "material", category: "attribute", canonical: "material", pack: "document" },
+  { phrase: "data sheet", category: "document", canonical: "data sheet", pack: "document" },
+  { phrase: "spec sheet", category: "document", canonical: "spec sheet", pack: "document" },
+  { phrase: "msds", category: "document", canonical: "msds", pack: "document" }
+];
+
+/** Configurator-specific multi-word concepts → semantic categories. */
+const SUSO_PHRASE_PACK_CONFIGURATOR = [
+  { phrase: "foam pad", category: "product_type", canonical: "foam", pack: "lcm" },
+  { phrase: "tufted wool", category: "product_type", canonical: "wool", pack: "lcm" },
+  { phrase: "wool pad", category: "product_type", canonical: "wool", pack: "lcm" },
+  { phrase: "white loop", category: "loop_type", canonical: "White Loop", pack: "lcm" },
+  { phrase: "black loop", category: "loop_type", canonical: "Black Loop", pack: "lcm" },
+  { phrase: "no loop", category: "loop_type", canonical: "No Loop", pack: "lcm" },
+  { phrase: "with hole", category: "finished_pad", canonical: "With Hole", pack: "lcm" },
+  { phrase: "no hole", category: "finished_pad", canonical: "No Hole", pack: "lcm" },
+  { phrase: "finished pad", category: "field", canonical: "foamHole", pack: "lcm" },
+  { phrase: "loop type", category: "field", canonical: "foamLoopType", pack: "lcm" },
+  { phrase: "pad size", category: "field", canonical: "foamPadSize", pack: "lcm" },
+  { phrase: "final od", category: "field", canonical: "woolPadSize", pack: "lcm" },
+  { phrase: "nap length", category: "field", canonical: "woolNap", pack: "lcm" },
+  { phrase: "backing type", category: "field", canonical: "woolBacking", pack: "lcm" },
+  { phrase: "poly type", category: "field", canonical: "woolPoly", pack: "lcm" },
+  { phrase: "sturdyness", category: "field", canonical: "woolMil", pack: "lcm" },
+  { phrase: "mil", category: "field", canonical: "woolMil", pack: "lcm" },
+  { phrase: "lc print", category: "print_type", canonical: "LC Print", pack: "lcm" },
+  { phrase: "no print", category: "print_type", canonical: "No Print", pack: "lcm" },
+  { phrase: "customer sample print", category: "print_type", canonical: "Customer Sample Print", pack: "lcm" },
+  { phrase: "curved", category: "orientation", canonical: "Curved", pack: "lcm" },
+  { phrase: "flat", category: "orientation", canonical: "Flat", pack: "lcm" },
+  { phrase: "requested by", category: "field", canonical: "reqName", pack: "lcm" },
+  { phrase: "sample name", category: "field", canonical: "sampleName", pack: "lcm" },
+  { phrase: "bill of materials", category: "intent", canonical: "export_bom", pack: "lcm" },
+  { phrase: "bom export", category: "intent", canonical: "export_bom", pack: "lcm" },
+  { phrase: "grind dia", category: "concept", canonical: "grinded_loop_dia", pack: "lcm" },
+  { phrase: "grinded loop", category: "concept", canonical: "grinded_loop_dia", pack: "lcm" },
+  { phrase: "wheel size", category: "concept", canonical: "wheel", pack: "lcm" },
+  { phrase: "foam color", category: "field", canonical: "foamColor", pack: "lcm" },
+  { phrase: "foam thickness", category: "field", canonical: "foamThickness", pack: "lcm" }
+];
+
+const SUSO_ADAPTER_IDS_CONFIGURATOR = ["configurator", "document_query"];
+
+function susoWordishBoundaryOk(low, start, len){
+  if (start < 0 || len < 1 || start + len > low.length) return false;
+  const before = start > 0 ? low[start - 1] : " ";
+  const after = start + len < low.length ? low[start + len] : " ";
+  if (/[a-z0-9]/.test(before)) return false;
+  if (/[a-z0-9]/.test(after)) return false;
+  return true;
+}
+
+function susoPhraseEntriesForConfigurator(){
+  const rows = [];
+  for (const row of SUSO_PHRASE_PACK_DOCUMENT){
+    const ph = String(row.phrase || "").toLowerCase().trim();
+    if (!ph) continue;
+    rows.push({
+      phrase: ph,
+      category: row.category || "concept",
+      canonical: row.canonical !== undefined ? row.canonical : null,
+      pack: row.pack || "document"
+    });
+  }
+  for (const row of SUSO_PHRASE_PACK_CONFIGURATOR){
+    const ph = String(row.phrase || "").toLowerCase().trim();
+    if (!ph) continue;
+    rows.push({
+      phrase: ph,
+      category: row.category || "concept",
+      canonical: row.canonical !== undefined ? row.canonical : null,
+      pack: row.pack || "lcm"
+    });
+  }
+  rows.sort((a, b) => b.phrase.length - a.phrase.length || String(a.phrase).localeCompare(String(b.phrase)));
+  const seen = new Set();
+  const out = [];
+  for (const r of rows){
+    const k = r.phrase + "\0" + r.category + "\0" + (r.canonical || "");
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(r);
+  }
+  return out;
+}
+
+function susoCollectPhraseMatches(low){
+  if (!low) return [];
+  const phrases = susoPhraseEntriesForConfigurator();
+  const out = [];
+  let i = 0;
+  while (i < low.length){
+    if (/\s/.test(low[i])){ i++; continue; }
+    let best = null;
+    for (const p of phrases){
+      const plen = p.phrase.length;
+      if (plen > low.length - i) continue;
+      if (low.slice(i, i + plen) !== p.phrase) continue;
+      if (!susoWordishBoundaryOk(low, i, plen)) continue;
+      best = p;
+      break;
+    }
+    if (best){
+      out.push(Object.assign({}, best, { start: i, end: i + best.phrase.length }));
+      i += best.phrase.length;
+    } else {
+      i++;
+    }
+  }
+  return out;
+}
+
+function susoInitIntentShell(intent, trace){
+  if (!intent._suso) intent._suso = { locks: Object.create(null), trace: trace || [], domain: null };
+  intent._suso.trace = trace || intent._suso.trace || [];
+  return intent;
+}
+
+function susoBuildConfiguratorSemanticSlots(low, matches){
+  const mlow = String(low || "");
+  const slots = {
+    questionType: null,
+    intentTag: null,
+    productType: null,
+    loopType: null,
+    finishedPad: null,
+    orientation: null,
+    printType: null,
+    attributes: [],
+    document: null,
+    domainCue: []
+  };
+  if (/\b(what|which|how much|how many|list)\b/.test(mlow)) slots.questionType = "wh_question";
+  else if (/\bwhy\b/.test(mlow)) slots.questionType = "why_question";
+  if (/\b(show|find|tell|give|lookup|display|available)\b/.test(mlow)) slots.intentTag = "retrieve";
+
+  for (const m of matches){
+    if (m.category === "product_type" && m.canonical) slots.productType = m.canonical;
+    if (m.category === "loop_type" && m.canonical) slots.loopType = m.canonical;
+    if (m.category === "finished_pad" && m.canonical) slots.finishedPad = m.canonical;
+    if (m.category === "orientation" && m.canonical) slots.orientation = m.canonical;
+    if (m.category === "print_type" && m.canonical) slots.printType = m.canonical;
+    if (m.category === "attribute" && m.canonical){
+      slots.attributes.push(m.canonical);
+      slots.domainCue.push("attribute:" + m.canonical);
+    }
+    if (m.category === "document" && m.canonical){
+      slots.document = m.canonical;
+      slots.domainCue.push("document:" + m.canonical);
+    }
+    if (m.category === "intent" && m.canonical === "export_bom") slots.intentTag = "export_bom";
+  }
+  return slots;
+}
+
+function parseIntentConfigurator(text){
+  const raw = (text || "").trim();
+  const t = raw.toLowerCase();
+  const intent = { raw, type: "configure", action: null, direction: null, target: null, insane: false };
+  if (!t){ intent.type = "none"; return intent; }
+  if (/\b(fly|divine|god|miracle)\b/.test(t)) intent.insane = true;
+
+  if ((/\b(export|download)\b/.test(t) && /\b(bom|xlsx|excel|spreadsheet)\b/.test(t)) || /^\s*export\s+bom\s*$/i.test(raw) || /^\s*export\s*$/i.test(raw.trim())){
+    intent.action = "export_bom";
+  } else if (/\breset\b/.test(t) && /\b(form|fields|all|everything|inputs?)\b/.test(t) || /^\s*reset\s*$/i.test(raw.trim())){
+    intent.action = "reset_form";
+  } else if (/\bwhy\b/.test(t) && (/\b(invalid|wrong|error|bad|doesn'?t|not\s+work|won'?t)\b/.test(t) || /\b(wool|combination|combo)\b/.test(t))){
+    intent.action = "explain_invalid";
+  } else if (/\b(validate|check)\b/.test(t) && /\b(form|fields|selections?)\b/.test(t)){
+    intent.action = "validate";
+  } else if (slotsLookLikeOptionQuestion(t)){
+    intent.action = "ask_options";
+  } else if (/\b(compat|compatible|work with|go with)\b/.test(t)){
+    intent.action = "ask_compatibility";
+  }
+
+  if (!intent.action && /\b(set|put|use)\b/.test(t) && /\b(requested|requester)\b/.test(t)) intent.action = "fill_fields";
+  else if (!intent.action) intent.action = "fill_fields";
+
+  return intent;
+
+  function slotsLookLikeOptionQuestion(tt){
+    return (/\b(what|which|list)\b/.test(tt) && /\b(available|option|choices?)\b/.test(tt))
+      || (/\bwhat\b/.test(tt) && /\bwheel/.test(tt) && /\b(size|sizes|available)\b/.test(tt));
+  }
+}
+
+function susoClassifyDomainConfigurator(low, semantic, baseIntent){
+  if (baseIntent.insane) return "meta";
+  const sem = semantic || {};
+  if (baseIntent.action === "explain_invalid" || baseIntent.action === "ask_compatibility") return "configurator";
+  if (baseIntent.action === "ask_options") return "configurator";
+  if (sem.questionType === "why_question" && /\b(wool|foam|pad|form)\b/.test(low)) return "configurator";
+  if (sem.intentTag === "export_bom" || baseIntent.action === "export_bom") return "configurator";
+  if (sem.intentTag === "retrieve" && (sem.attributes.length || sem.document) && /\b(data|sheet|pdf|spec|part|material|pressure|temperature|dimension)\b/.test(low)){
+    return "document_query";
+  }
+  if ((sem.questionType === "wh_question" || /\b(what|which)\b/.test(low)) && (sem.attributes.length > 0 || /\b(pressure|temperature|dimension|material|part number|model number)\b/.test(low))){
+    return "document_query";
+  }
+  return "configurator";
+}
+
+function susoPickAdapterConfigurator(domain){
+  if (domain === "document_query") return { adapter: "document_query", rule: "domain_document_query" };
+  return { adapter: "configurator", rule: "domain_configurator" };
+}
+
+function susoListRejectedAdaptersConfigurator(chosen){
+  return SUSO_ADAPTER_IDS_CONFIGURATOR.filter(id => id !== chosen).map(id => ({
+    adapter: id,
+    reason: "not_selected:winner=" + chosen
+  }));
+}
+
+function susoNormalizeConfiguratorRequest(adapter, kind, domain, rule, payload){
+  return {
+    version: 1,
+    kind,
+    adapter,
+    domain,
+    rule,
+    payload,
+    rejectedAlternatives: susoListRejectedAdaptersConfigurator(adapter)
+  };
+}
+
+function susoExtractRequestedBy(low, raw){
+  let m = raw.match(/\b(?:requested by|requester|set requested by)\s*[:\-]?\s*(.+)$/i);
+  if (m) return m[1].trim();
+  m = low.match(/\bset\s+requested\s+by\s+(.+)$/);
+  if (m) return m[1].trim().replace(/\s+/g, " ");
+  return null;
+}
+
+function susoExtractNumbersForFoam(low){
+  const nums = [];
+  const re = /\b(\d+(?:\.\d+)?)\s*(?:inch|in|\")?\b/gi;
+  let x;
+  while ((x = re.exec(low)) !== null){
+    const n = parseFloat(x[1]);
+    if (Number.isFinite(n)) nums.push({ value: n, index: x.index });
+  }
+  return nums;
+}
+
+function pickMatchingOption(want, options){
+  if (!want || !options || !options.length) return null;
+  const wu = normU(want);
+  const exact = options.find(o => normU(o) === wu);
+  if (exact) return exact;
+  const substr = options.find(o => wu.includes(normU(o)) || normU(o).includes(wu));
+  if (substr) return substr;
+  return null;
+}
+
+function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
+  const fields = {};
+  const notes = [];
+  const clarifications = [];
+
+  const rb = susoExtractRequestedBy(low, raw);
+  if (rb) fields.reqName = rb;
+
+  if (semantic.productType === "foam") fields.prodType = "foam";
+  if (semantic.productType === "wool") fields.prodType = "wool";
+  if (/\bfoam\b/.test(low) && !semantic.productType) fields.prodType = "foam";
+  if (/\btufted\b/.test(low) && /\bwool\b/.test(low)) fields.prodType = "wool";
+
+  if (semantic.loopType) fields.foamLoopType = semantic.loopType;
+  if (semantic.finishedPad) fields.foamHole = semantic.finishedPad;
+  if (semantic.orientation) fields.woolOrientation = semantic.orientation;
+  if (semantic.printType) fields.woolPrint = semantic.printType;
+
+  if (foamRows.length){
+    const colors = uniqSorted(foamRows, COL.foam_color);
+    for (const c of colors){
+      const lc = norm(c).toLowerCase();
+      if (lc.length > 1 && new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(low)){
+        fields.foamColor = c;
+        break;
+      }
+    }
+  }
+
+  const nums = susoExtractNumbersForFoam(low);
+  const woolish = semantic.productType === "wool" || fields.prodType === "wool"
+    || /\btufted\s+wool\b|\bwool\s+pad\b/.test(low)
+    || (/\bwool\b/.test(low) && !/\bfoam\s+pad\b/.test(low) && !/\bfoam\b/.test(low));
+
+  if (!woolish && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
+    const dec = nums.filter(n => /^\d+\.\d+$/.test(String(n.value)) || (n.value < 2 && n.value % 1 !== 0));
+    const whole = nums.filter(n => n.value >= 2 || n.value === Math.floor(n.value));
+    if (dec.length === 1) fields._thicknessNum = dec[0].value;
+    if (whole.length){
+      const padCandidate = whole[whole.length - 1].value;
+      fields._padNum = padCandidate;
+    } else if (nums.length === 1 && !fields._thicknessNum){
+      const n0 = nums[0].value;
+      if (n0 < 2 && n0 % 1 !== 0) fields._thicknessNum = n0;
+      else fields._padNum = n0;
+    }
+  }
+
+  if (fields._thicknessNum != null && foamRows.length){
+    const thkOpts = fields.foamColor
+      ? uniqSorted(foamRowsByColor(fields.foamColor), COL.foam_thickness)
+      : uniqSorted(foamRows, COL.foam_thickness);
+    const matchThk = thkOpts.map(t => ({ t, n: toNum(t) })).find(o => o.n !== null && Math.abs(o.n - fields._thicknessNum) < 1e-6);
+    if (matchThk) fields.foamThickness = matchThk.t;
+    else {
+      notes.push("Thickness " + fields._thicknessNum + " not in current option list (after color context).");
+      clarifications.push("Pick thickness from the list or adjust color first.");
+    }
+  }
+
+  if (woolish && woolRows.length){
+    const ods = uniqSorted(woolRows, "Final OD");
+    const n = nums[0] && nums[0].value;
+    if (n != null){
+      const hit = pickMatchingOption(String(n), ods) || ods.find(o => norm(o).includes(String(n)));
+      if (hit) fields.woolPadSize = hit;
+    }
+  }
+
+  if (!woolish && fields._padNum != null && geoRows.length){
+    const wheel = els.foamWheel.value;
+    const pads = wheel
+      ? splitMaybeComma(uniqSorted(geoRowsByWheel(wheel), COL.geo_padSizes).join(","))
+      : [...new Set(geoRows.flatMap(r => splitMaybeComma(r[COL.geo_padSizes])))];
+    const asStr = String(fields._padNum);
+    const hit = pads.find(p => Math.abs(toNum(p) - fields._padNum) < 1e-6 || normU(p) === normU(asStr))
+      || pads.find(p => norm(p).includes(asStr));
+    if (hit) fields.foamPadSize = hit;
+    else {
+      notes.push("Pad size " + fields._padNum + " not matched to loaded geometry yet (need wheel/thickness context).");
+      clarifications.push("Select wheel first if pad list is empty; then pick pad size from dropdown.");
+    }
+  }
+
+  for (const m of phraseMatches){
+    if (m.category === "loop_type" && m.canonical) fields.foamLoopType = m.canonical;
+    if (m.category === "finished_pad" && m.canonical) fields.foamHole = m.canonical;
+  }
+
+  if (/white\s+loop|black\s+loop|no\s+loop/i.test(raw) && !fields.foamLoopType){
+    if (/white\s+loop/i.test(raw)) fields.foamLoopType = "White Loop";
+    else if (/black\s+loop/i.test(raw)) fields.foamLoopType = "Black Loop";
+    else if (/no\s+loop/i.test(raw)) fields.foamLoopType = "No Loop";
+  }
+  if (/\bno\s+hole\b/i.test(raw)) fields.foamHole = "No Hole";
+  if (/\bwith\s+hole\b/i.test(raw)) fields.foamHole = "With Hole";
+
+  return { fields, notes, clarifications };
+}
+
+function susoRouteConfiguratorInterpretation(intent, text, low, trace){
+  const sem = intent.semantic || {};
+  const pick = susoPickAdapterConfigurator(intent._suso.domain);
+  const adapter = pick.adapter;
+
+  if (adapter === "document_query"){
+    const payload = {
+      raw: text,
+      questionType: sem.questionType,
+      attributes: sem.attributes.slice ? sem.attributes.slice() : [],
+      document: sem.document || null,
+      execution: { stub: true, note: "Wire workbook / data-sheet resolver (Excel graph, embeddings, or RAG)." }
+    };
+    const routed = susoNormalizeConfiguratorRequest(adapter, "document_query", intent._suso.domain, pick.rule, payload);
+    trace.push({ t: "routing", adapter, kind: routed.kind, rule: pick.rule, domain: intent._suso.domain });
+    return routed;
+  }
+
+  const base = intent;
+  if (base.action === "export_bom"){
+    const routed = susoNormalizeConfiguratorRequest("configurator", "export_bom", intent._suso.domain, "intent_export", { raw: text });
+    trace.push({ t: "routing", adapter: "configurator", kind: "export_bom", rule: "intent_export" });
+    return routed;
+  }
+  if (base.action === "reset_form"){
+    const routed = susoNormalizeConfiguratorRequest("configurator", "reset_form", intent._suso.domain, "intent_reset", { raw: text });
+    trace.push({ t: "routing", adapter: "configurator", kind: "reset_form", rule: "intent_reset" });
+    return routed;
+  }
+  if (base.action === "explain_invalid"){
+    const routed = susoNormalizeConfiguratorRequest("configurator", "explain_invalid_state", intent._suso.domain, "why_invalid", { raw: text, modeHint: currentMode });
+    trace.push({ t: "routing", adapter: "configurator", kind: "explain_invalid_state", rule: "why_invalid" });
+    return routed;
+  }
+  if (base.action === "validate"){
+    const routed = susoNormalizeConfiguratorRequest("configurator", "validate_form", intent._suso.domain, "validate", { raw: text });
+    trace.push({ t: "routing", adapter: "configurator", kind: "validate_form", rule: "validate" });
+    return routed;
+  }
+  if (base.action === "ask_options"){
+    let topic = "unknown";
+    if (/\bwheel/.test(low)) topic = "foam_wheel_sizes";
+    const routed = susoNormalizeConfiguratorRequest("configurator", "ask_options", intent._suso.domain, "options_question", { raw: text, topic });
+    trace.push({ t: "routing", adapter: "configurator", kind: "ask_options", rule: "options_question", topic });
+    return routed;
+  }
+  if (base.action === "ask_compatibility"){
+    const routed = susoNormalizeConfiguratorRequest("configurator", "ask_compatibility", intent._suso.domain, "compatibility_question", { raw: text });
+    trace.push({ t: "routing", adapter: "configurator", kind: "ask_compatibility", rule: "compatibility_question" });
+    return routed;
+  }
+
+  const inferred = susoInferFieldsFromText(low, text, sem, intent._phraseMatches || []);
+  const payload = {
+    raw: text,
+    fields: inferred.fields,
+    inferenceNotes: inferred.notes,
+    clarifications: inferred.clarifications,
+    confidence: inferred.clarifications.length ? "partial" : "high"
+  };
+  const routed = susoNormalizeConfiguratorRequest("configurator", "set_fields", intent._suso.domain, "fill_partial", payload);
+  trace.push({ t: "routing", adapter: "configurator", kind: "set_fields", rule: "fill_partial", confidence: payload.confidence });
+  return routed;
+}
+
+function interpretIntentRichConfigurator(text){
+  const trace = [];
+  const base = parseIntentConfigurator(text);
+  const low = String(text || "").toLowerCase();
+  const rich = Object.assign({}, base);
+  susoInitIntentShell(rich, trace);
+
+  const phraseMatches = susoCollectPhraseMatches(low);
+  rich._phraseMatches = phraseMatches;
+  rich.semantic = susoBuildConfiguratorSemanticSlots(low, phraseMatches);
+
+  trace.push({
+    t: "phrase_layer",
+    chunks: phraseMatches.map(m => ({ phrase: m.phrase, category: m.category, canonical: m.canonical, span: [m.start, m.end], pack: m.pack || null })),
+    semanticSlots: rich.semantic
+  });
+
+  rich._suso.domain = susoClassifyDomainConfigurator(low, rich.semantic, base);
+  trace.push({ t: "domain", domain: rich._suso.domain });
+
+  const routed = susoRouteConfiguratorInterpretation(rich, text, low, trace);
+  rich.routed = routed;
+
+  trace.push({
+    t: "interpretation_path",
+    domain: rich._suso.domain,
+    adapter: routed.adapter,
+    kind: routed.kind,
+    rule: routed.rule
+  });
+  rich.intentTrace = trace;
+  return rich;
+}
+
+function applyProdType(pt){
+  if (pt === "foam") document.getElementById("ptFoam").checked = true;
+  else if (pt === "wool") document.getElementById("ptWool").checked = true;
+  updateMode();
+}
+
+function applyConfiguratorFields(partial){
+  const applied = {};
+  const skipped = {};
+
+  const setIf = (key, el, val, list)=>{
+    if (val == null || val === "") return;
+    if (list && list.length && !list.some(o => normU(o) === normU(val))){
+      skipped[key] = val;
+      return;
+    }
+    el.value = val;
+    applied[key] = val;
+  };
+
+  if (partial.reqName != null) els.reqName.value = partial.reqName;
+  if (partial.sampleName != null) els.sampleName.value = partial.sampleName;
+
+  if (partial.prodType){
+    applyProdType(partial.prodType);
+  }
+
+  if (currentMode === "foam"){
+    setIf("foamColor", els.foamColor, partial.foamColor, uniqSorted(foamRows, COL.foam_color));
+    recomputeFoam();
+    setIf("foamThickness", els.foamThickness, partial.foamThickness, uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness));
+    recomputeFoam();
+    if (!els.foamPartColorRow.classList.contains("hidden")){
+      const pcs = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
+      setIf("foamPartColor", els.foamPartColor, partial.foamPartColor, pcs);
+    }
+    recomputeFoam();
+    setIf("foamWheel", els.foamWheel, partial.foamWheel, uniqSorted(geoRows, COL.geo_wheel));
+    recomputeFoam();
+    const padOpts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
+    setIf("foamPadSize", els.foamPadSize, partial.foamPadSize, padOpts);
+    setIf("foamLoopType", els.foamLoopType, partial.foamLoopType, ["White Loop", "Black Loop", "No Loop"]);
+    setIf("foamHole", els.foamHole, partial.foamHole, ["With Hole", "No Hole"]);
+    if (partial.foamQty != null){
+      const q = parseInt(String(partial.foamQty), 10);
+      if (Number.isFinite(q) && q >= 1) els.foamQty.value = String(q);
+    }
+    if (partial.foamNotes != null) els.foamNotes.value = partial.foamNotes;
+  } else {
+    setIf("woolPadSize", els.woolPadSize, partial.woolPadSize, uniqSorted(woolRows, "Final OD"));
+    recomputeWoolAll();
+    setIf("woolNap", els.woolNap, partial.woolNap, uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length"));
+    recomputeWoolAll();
+    setIf("woolYarn", els.woolYarn, partial.woolYarn, uniqSorted(woolRows.filter(r =>
+      normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
+    ), "Yarn"));
+    recomputeWoolAll();
+    setIf("woolOrientation", els.woolOrientation, partial.woolOrientation, ["Curved", "Flat"]);
+    recomputeWoolStack();
+    const backOpts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
+    setIf("woolBacking", els.woolBacking, partial.woolBacking, backOpts);
+    recomputeWoolStack();
+    const polyOpts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
+    setIf("woolPoly", els.woolPoly, partial.woolPoly, polyOpts);
+    recomputeWoolStack();
+    const milOpts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
+    setIf("woolMil", els.woolMil, partial.woolMil, milOpts);
+    setIf("woolPrint", els.woolPrint, partial.woolPrint, ["No Print", "LC Print", "Customer Sample Print"]);
+    if (partial.woolNotes != null) els.woolNotes.value = partial.woolNotes;
+  }
+
+  clearMissing();
+  if (currentMode === "foam") recomputeFoam();
+  else recomputeWoolAll();
+
+  return { applied, skipped };
+}
+
+function explainConfiguratorInvalid(){
+  if (currentMode === "wool"){
+    const base = resolveWoolBase();
+    const stack = resolveWoolStackFinal();
+    const parts = [];
+    if (!els.woolPadSize.value || !els.woolNap.value || !els.woolYarn.value) parts.push("Select Final OD, Nap, and Yarn first.");
+    if (!base) parts.push("The selected OD / Nap / Yarn does not resolve to a single wool base row.");
+    if (base && !stack) parts.push("Backing / Poly / MIL do not narrow to exactly one stack row for this tufted diameter — adjust Loop vs Canvas and Poly/MIL.");
+    if (!parts.length) parts.push("Current wool selections resolve; run export to confirm.");
+    return parts.join(" ");
+  }
+  const foamResolved = resolveFoamRow();
+  const foamParts = [];
+  if (!foamResolved) foamParts.push("Foam Part is ambiguous or incomplete — check color, thickness, and Part Color if shown.");
+  return (foamParts.length ? foamParts.join(" ") : "Foam row resolves. ") +
+    "Export also requires Requested By or Sample Name, Wheel, Pad Size, Loop Type, and Finished Pad.";
+}
+
+function runConfiguratorAdapter(routed){
+  const k = routed.kind;
+  const p = routed.payload || {};
+
+  if (k === "document_query"){
+    return {
+      text: "Document / data-sheet Q&A is not wired yet. Recognized attributes: " + (p.attributes || []).join(", ") + ". " + (p.execution && p.execution.note ? p.execution.note : ""),
+      executed: false,
+      stub: true
+    };
+  }
+  if (k === "export_bom"){
+    exportTestBOM();
+    return { text: "Triggered BOM export (same validation as the Download button).", executed: true };
+  }
+  if (k === "reset_form"){
+    els.btnReset.click();
+    return { text: "Form reset.", executed: true };
+  }
+  if (k === "validate_form"){
+    const v = validateForExport();
+    return { text: v.ok ? "Validation passed for the current mode." : ("Validation: " + (v.msg || "Fix highlighted fields.")), executed: true };
+  }
+  if (k === "ask_options"){
+    if (p.topic === "foam_wheel_sizes"){
+      if (currentMode !== "foam") return { text: "Switch to Foam Pad to inspect wheels for foam geometry.", executed: true };
+      const thk = els.foamThickness.value;
+      if (!thk) return { text: "Select a foam thickness first; wheel sizes depend on the THK column mapping.", executed: true };
+      const wheels = wheelsForThickness(thk);
+      return { text: "Wheels available for thickness " + thk + ": " + (wheels.length ? wheels.join(", ") : "(none in sheet for this bucket)"), executed: true };
+    }
+    return { text: "Ask a more specific options question (e.g. wheel sizes for this foam).", executed: false };
+  }
+  if (k === "ask_compatibility"){
+    return {
+      text: "Compatibility is enforced by the cascading dropdowns and stack resolution. " + explainConfiguratorInvalid(),
+      executed: true
+    };
+  }
+  if (k === "explain_invalid_state"){
+    const v = validateForExport();
+    return {
+      text: explainConfiguratorInvalid() + (v.ok ? "" : " Validation message: " + v.msg),
+      executed: true
+    };
+  }
+  if (k === "set_fields"){
+    const f = Object.assign({}, p.fields);
+    delete f._thicknessNum;
+    delete f._padNum;
+    const res = applyConfiguratorFields(f);
+    let msg = "Applied field updates where options matched. ";
+    if (p.inferenceNotes && p.inferenceNotes.length) msg += p.inferenceNotes.join(" ");
+    if (p.clarifications && p.clarifications.length) msg += " Note: " + p.clarifications.join(" ");
+    if (res.skipped && Object.keys(res.skipped).length) msg += " Skipped (no matching option): " + JSON.stringify(res.skipped);
+    return { text: msg.trim(), executed: true, applied: res.applied };
+  }
+
+  return { text: "Unhandled routed kind: " + k, executed: false };
+}
+
+function showSusoTrace(obj){
+  if (els.susoTrace) els.susoTrace.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+}
+
+function escapeChatHtml(s){
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function appendChat(role, text){
+  if (!els.chatLog) return;
+  const div = document.createElement("div");
+  div.className = "msg " + (role === "user" ? "user" : "suso");
+  const raw = escapeChatHtml(text).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  div.innerHTML = raw;
+  els.chatLog.appendChild(div);
+  els.chatLog.scrollTop = els.chatLog.scrollHeight;
+}
+
+function formatOptionsForPrompt(opts){
+  if (!opts || !opts.length) return "";
+  if (opts.length <= 12){
+    return "\n\nOptions: " + opts.join(" · ");
+  }
+  return "\n\n" + opts.map((o, i) => (i + 1) + ". " + o).join("\n");
+}
+
+function matchOptionFromUserText(text, options){
+  if (!options || !options.length) return null;
+  const low = norm(text).toLowerCase();
+  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
+  if (mNum){
+    const i = parseInt(mNum[1], 10) - 1;
+    if (i >= 0 && i < options.length) return options[i];
+  }
+  for (const o of options){
+    const ou = norm(o).toLowerCase();
+    if (low === ou || ou === low) return o;
+  }
+  for (const o of options){
+    const ou = norm(o).toLowerCase();
+    if (low.includes(ou) || ou.includes(low)) return o;
+  }
+  return null;
+}
+
+function tryParseIdentityLine(text){
+  const t = norm(text);
+  if (!t) return;
+  const low = t.toLowerCase();
+  let req = null;
+  let samp = null;
+  const rb = t.match(/(?:requested\s*by|requester)\s*[:\-]?\s*([^,\n]+?)(?:\s*,|\s+sample|\s*$)/i);
+  const sn = t.match(/(?:sample\s*name|sample)\s*[:\-]?\s*(.+)$/i);
+  if (rb) req = norm(rb[1]);
+  if (sn) samp = norm(sn[1]);
+  if (!req && !samp){
+    if (t.includes(",")){
+      const p = t.split(",").map(x => norm(x)).filter(Boolean);
+      if (p.length >= 2){ req = p[0]; samp = p.slice(1).join(", "); }
+      else req = p[0];
+    } else if (!/foam|wool|pad|tufted|loop|hole|inch/i.test(low)){
+      req = t;
+    }
+  }
+  if (req) els.reqName.value = req;
+  if (samp) els.sampleName.value = samp;
+}
+
+function tryApplyStepAnswer(text, step){
+  if (!step || !wb) return;
+  const low = norm(text).toLowerCase();
+  if (step === "prodType"){
+    if (/\bfoam\b/.test(low) && !/\btufted\s+wool\b/.test(low)) applyProdType("foam");
+    else if (/\bwool\b/.test(low) || /\btufted\b/.test(low)) applyProdType("wool");
+    return;
+  }
+  if (step === "identity"){
+    tryParseIdentityLine(text);
+    return;
+  }
+
+  let opts = [];
+  if (step === "foamColor") opts = uniqSorted(foamRows, COL.foam_color);
+  else if (step === "foamThickness") opts = els.foamColor.value ? uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness) : [];
+  else if (step === "foamPartColor"){
+    opts = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
+  }
+  else if (step === "foamWheel"){
+    opts = wheelsForThickness(els.foamThickness.value);
+    if (!opts.length) opts = uniqSorted(geoRows, COL.geo_wheel);
+  }
+  else if (step === "foamPadSize"){
+    opts = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
+    opts = Array.from(new Set(opts)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+  }
+  else if (step === "foamLoopType") opts = ["White Loop", "Black Loop", "No Loop"];
+  else if (step === "foamHole") opts = ["With Hole", "No Hole"];
+  else if (step === "woolPadSize") opts = uniqSorted(woolRows, "Final OD");
+  else if (step === "woolNap") opts = uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length");
+  else if (step === "woolYarn") opts = uniqSorted(woolRows.filter(r =>
+    normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
+  ), "Yarn");
+  else if (step === "woolOrientation") opts = ["Curved", "Flat"];
+  else if (step === "woolPrint") opts = ["No Print", "LC Print", "Customer Sample Print"];
+  else if (step === "woolBacking") opts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
+  else if (step === "woolPoly") opts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
+  else if (step === "woolMil") opts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
+
+  const pick = opts.length ? matchOptionFromUserText(text, opts) : null;
+
+  if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return; }
+  if (step === "foamThickness" && pick){ els.foamThickness.value = pick; recomputeFoam(); return; }
+  if (step === "foamPartColor" && pick){ els.foamPartColor.value = pick; recomputeFoam(); return; }
+  if (step === "foamWheel" && pick){ els.foamWheel.value = pick; recomputeFoam(); return; }
+  if (step === "foamPadSize" && pick){ els.foamPadSize.value = pick; recomputeFoam(); return; }
+  if (step === "foamQty"){
+    const q = parseInt(text, 10);
+    if (Number.isFinite(q) && q >= 1) els.foamQty.value = String(q);
+    return;
+  }
+  if (step === "foamLoopType" && pick){ els.foamLoopType.value = pick; return; }
+  if (step === "foamHole" && pick){ els.foamHole.value = pick; return; }
+  if (step === "foamNotes"){ els.foamNotes.value = norm(text); return; }
+
+  if (step === "woolPadSize" && pick){ els.woolPadSize.value = pick; recomputeWoolAll(); return; }
+  if (step === "woolNap" && pick){ els.woolNap.value = pick; recomputeWoolAll(); return; }
+  if (step === "woolYarn" && pick){ els.woolYarn.value = pick; recomputeWoolAll(); return; }
+  if (step === "woolOrientation" && pick){ els.woolOrientation.value = pick; return; }
+  if (step === "woolBacking" && pick){ els.woolBacking.value = pick; recomputeWoolStack(); return; }
+  if (step === "woolPoly" && pick){ els.woolPoly.value = pick; recomputeWoolStack(); return; }
+  if (step === "woolMil" && pick){ els.woolMil.value = pick; return; }
+  if (step === "woolPrint" && pick){ els.woolPrint.value = pick; return; }
+  if (step === "woolNotes"){ els.woolNotes.value = norm(text); return; }
+}
+
+function getNextMissingSlot(){
+  if (!wb) return { stepId: "need_load", prompt: "Load the catalog first (button above).", options: [] };
+
+  if (currentMode === null){
+    return {
+      stepId: "prodType",
+      prompt: "First, which are you configuring? **Foam pad** or **tufted wool** pad?",
+      options: ["Foam pad", "Tufted wool pad"]
+    };
+  }
+
+  if (!hasAnyName()){
+    return {
+      stepId: "identity",
+      prompt: "Who should we list as **requested by**, and what **sample name** (if any)? You can answer like: `Requested by: Jane Doe, Sample: Red test`.",
+      allowFreeText: true,
+      options: []
+    };
+  }
+
+  if (currentMode === "foam"){
+    if (!els.foamColor.value){
+      return { stepId: "foamColor", prompt: "Which **foam color**?", options: uniqSorted(foamRows, COL.foam_color) };
+    }
+    if (!els.foamThickness.value){
+      return { stepId: "foamThickness", prompt: "Which **thickness**?", options: uniqSorted(foamRowsByColor(els.foamColor.value), COL.foam_thickness) };
+    }
+    const needPart = !els.foamPartColorRow.classList.contains("hidden");
+    if (needPart && !els.foamPartColor.value){
+      const pcs = Array.from(new Set(foamRowsByColorThickness(els.foamColor.value, els.foamThickness.value).map(r => norm(r[COL.foam_partColor])).filter(Boolean)));
+      return { stepId: "foamPartColor", prompt: "Which **part color** (foam part) applies?", options: pcs.sort((a,b)=>a.localeCompare(b,undefined,{numeric:true})) };
+    }
+    if (!els.foamWheel.value){
+      const wopts = wheelsForThickness(els.foamThickness.value);
+      return { stepId: "foamWheel", prompt: "Which **wheel**?", options: wopts.length ? wopts : uniqSorted(geoRows, COL.geo_wheel) };
+    }
+    if (!els.foamPadSize.value){
+      const pads = uniqSorted(geoRowsByWheel(els.foamWheel.value), COL.geo_padSizes).flatMap(splitMaybeComma);
+      const padUnique = Array.from(new Set(pads)).sort((a,b)=>a.localeCompare(b, undefined, {numeric:true}));
+      return { stepId: "foamPadSize", prompt: "Which **pad size**?", options: padUnique };
+    }
+    const qty = parseInt(els.foamQty.value || "0", 10);
+    if (!Number.isFinite(qty) || qty < 1){
+      return { stepId: "foamQty", prompt: "What **quantity** (minimum 1)?", options: [] };
+    }
+    if (!els.foamLoopType.value){
+      return { stepId: "foamLoopType", prompt: "Which **loop type**?", options: ["White Loop", "Black Loop", "No Loop"] };
+    }
+    if (!els.foamHole.value){
+      return { stepId: "foamHole", prompt: "**Finished pad** — with hole or no hole?", options: ["With Hole", "No Hole"] };
+    }
+    if (!resolveFoamRow()){
+      return { stepId: "foam_resolve", prompt: "Foam part is still ambiguous. Try adjusting **color**, **thickness**, or **part color** so one BOM row matches.", options: [] };
+    }
+    return { stepId: "complete", prompt: "**Configuration complete.** Say **export** or tap **Download BOM** to save the spreadsheet. (You can add **notes** in chat anytime before exporting.)", options: [] };
+  }
+
+  if (currentMode === "wool"){
+    if (!els.woolPadSize.value){
+      return { stepId: "woolPadSize", prompt: "What **final pad size (Final OD)**?", options: uniqSorted(woolRows, "Final OD") };
+    }
+    if (!els.woolNap.value){
+      return { stepId: "woolNap", prompt: "Which **nap length**?", options: uniqSorted(woolRows.filter(r => normU(r["Final OD"]) === normU(els.woolPadSize.value)), "Nap Length") };
+    }
+    if (!els.woolYarn.value){
+      return { stepId: "woolYarn", prompt: "Which **yarn**?", options: uniqSorted(woolRows.filter(r =>
+        normU(r["Final OD"]) === normU(els.woolPadSize.value) && normU(r["Nap Length"]) === normU(els.woolNap.value)
+      ), "Yarn") };
+    }
+    if (!els.woolOrientation.value){
+      return { stepId: "woolOrientation", prompt: "**Orientation** — curved or flat?", options: ["Curved", "Flat"] };
+    }
+    recomputeWoolStack();
+    if (!els.woolBacking.value){
+      const backOpts = Array.from(els.woolBacking.options).map(o => o.value).filter(Boolean);
+      return { stepId: "woolBacking", prompt: "Which **backing type**?", options: backOpts.length ? backOpts : ["Loop", "Canvas"] };
+    }
+    if (!els.woolPoly.value){
+      const polyOpts = Array.from(els.woolPoly.options).map(o => o.value).filter(Boolean);
+      return { stepId: "woolPoly", prompt: "Which **poly type**?", options: polyOpts };
+    }
+    if (!els.woolMil.value){
+      const milOpts = Array.from(els.woolMil.options).map(o => o.value).filter(Boolean);
+      return { stepId: "woolMil", prompt: "Which **MIL (sturdyness)**?", options: milOpts };
+    }
+    if (!els.woolPrint.value){
+      return { stepId: "woolPrint", prompt: "Which **print**?", options: ["No Print", "LC Print", "Customer Sample Print"] };
+    }
+    if (!resolveWoolBase() || !resolveWoolStackFinal()){
+      return { stepId: "wool_resolve", prompt: "That combination doesn’t narrow to one stack row yet. Try different **backing / poly / MIL** choices that appear in the list.", options: [] };
+    }
+    return { stepId: "complete", prompt: "**Configuration complete.** Say **export** or tap **Download BOM**.", options: [] };
+  }
+
+  return { stepId: "complete", prompt: "**Done.** Say **export** to download.", options: [] };
+}
+
+function startSusoSession(){
+  if (!els.chatLog) return;
+  els.chatLog.innerHTML = "";
+  appendChat("suso", "Catalog is loaded. I’ll narrow this down step by step. First: are you ordering a **foam pad** or a **tufted wool** pad?");
+  susoAwaitingStep = "prodType";
+}
+
+function runSusoCommand(){
+  const text = norm(els.susoInput && els.susoInput.value);
+  if (!text) return;
+
+  appendChat("user", text);
+  els.susoInput.value = "";
+
+  const rich = interpretIntentRichConfigurator(text);
+  const exec = runConfiguratorAdapter(rich.routed);
+
+  const traceOut = {
+    phraseMatches: (rich._phraseMatches || []).map(m => ({ phrase: m.phrase, category: m.category, canonical: m.canonical, pack: m.pack })),
+    semanticSlots: rich.semantic,
+    domain: rich._suso.domain,
+    adapter: rich.routed.adapter,
+    rule: rich.routed.rule,
+    finalRequest: rich.routed,
+    execution: exec,
+    fullTrace: rich.intentTrace
+  };
+  showSusoTrace(traceOut);
+
+  const k = rich.routed.kind;
+
+  if (k === "export_bom"){
+    appendChat("suso", exec.text || "Export attempted.");
+    susoAwaitingStep = getNextMissingSlot().stepId;
+    return;
+  }
+
+  if (k === "reset_form"){
+    appendChat("suso", exec.text || "Session reset. Continue below.");
+    return;
+  }
+
+  if (k === "document_query"){
+    appendChat("suso", exec.text || "");
+    return;
+  }
+
+  if (k === "validate_form" || k === "explain_invalid_state" || k === "ask_options" || k === "ask_compatibility"){
+    appendChat("suso", exec.text || "");
+    susoAwaitingStep = getNextMissingSlot().stepId;
+    return;
+  }
+
+  if (k === "set_fields"){
+    const p = rich.routed.payload || {};
+    const f = Object.assign({}, p.fields);
+    delete f._thicknessNum;
+    delete f._padNum;
+    applyConfiguratorFields(f);
+    if (p.inferenceNotes && p.inferenceNotes.length) appendChat("suso", p.inferenceNotes.join(" "));
+    if (p.clarifications && p.clarifications.length) appendChat("suso", "Note: " + p.clarifications.join(" "));
+  }
+
+  if (currentMode === "wool") recomputeWoolStack();
+
+  tryApplyStepAnswer(text, susoAwaitingStep);
+
+  const slot = getNextMissingSlot();
+  susoAwaitingStep = slot.stepId;
+
+  if (slot.stepId === "complete"){
+    appendChat("suso", slot.prompt);
+    return;
+  }
+  if (slot.stepId === "need_load") return;
+
+  appendChat("suso", slot.prompt + formatOptionsForPrompt(slot.options));
+}
+
+/***********************
  * Smart loader (Excel -> JSON), tenant-gated
  ***********************/
 function workbookToDb(wbIn){
@@ -1133,12 +2227,19 @@ function applyDbToApp(db){
   setInputsEnabled(true);
   els.btnReset.disabled = false;
 
+  document.getElementById("ptFoam").checked = false;
+  document.getElementById("ptWool").checked = false;
+  currentMode = null;
+  updateMode();
+
   recomputeFoam();
   recomputeWoolAll();
   updateDebugAndButtons();
 
   // ✅ allow export button once data is loaded
   els.btnDownload.disabled = false;
+
+  if (susoAgentMode) startSusoSession();
 }
 
 async function loadAll(){
@@ -1177,9 +2278,13 @@ function setInputsEnabled(on){
     els.reqName, els.sampleName,
     els.foamColor, els.foamThickness, els.foamWheel, els.foamPadSize,
     els.foamQty, els.foamLoopType, els.foamHole, els.foamNotes,
-    els.woolPadSize, els.woolNap, els.woolYarn, els.woolOrientation, els.woolBacking, els.woolPoly, els.woolMil, els.woolPrint, els.woolNotes
-  ].forEach(el => { if (el) el.disabled = !on; });
-  els.foamPartColor.disabled = !on;
+    els.woolPadSize, els.woolNap, els.woolYarn, els.woolOrientation, els.woolBacking, els.woolPoly, els.woolMil, els.woolPrint, els.woolNotes,
+    els.foamPartColor
+  ].forEach(el => { if (el) el.disabled = true; });
+  if (els.reqName) els.reqName.disabled = true;
+  if (els.sampleName) els.sampleName.disabled = true;
+  if (els.susoInput) els.susoInput.disabled = !on;
+  if (els.btnSusoRun) els.btnSusoRun.disabled = !on;
 }
 
 function safeFileName(str){
@@ -1200,10 +2305,13 @@ function buildFileName(){
 async function exportTestBOM(){
   const v = validateForExport();
   if (!v.ok){
-    alert(v.msg || "Fill the highlighted fields.");
-    // scroll to first missing field
-    const first = document.querySelector(".row.missing");
-    if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (susoAgentMode && typeof appendChat === "function"){
+      appendChat("suso", v.msg || "Cannot export yet — keep answering Suso’s questions.");
+    } else {
+      alert(v.msg || "Fill the highlighted fields.");
+      const first = document.querySelector(".row.missing");
+      if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     return;
   }
 
@@ -1213,8 +2321,8 @@ async function exportTestBOM(){
     const base = resolveWoolBase();
     const stack = resolveWoolStackFinal();
     if (!base || !stack) {
-      // should be caught by validateForExport, but keep safe
-      alert("Fill the highlighted wool fields.");
+      if (susoAgentMode && typeof appendChat === "function") appendChat("suso", "Wool selections are not complete.");
+      else alert("Fill the highlighted wool fields.");
       return;
     }
 
@@ -1258,7 +2366,8 @@ async function exportTestBOM(){
 
   const foamResolved = resolveFoamRow();
   if (!foamResolved) {
-    alert("Fill the highlighted foam fields.");
+    if (susoAgentMode && typeof appendChat === "function") appendChat("suso", "Foam selections do not resolve to one part row yet.");
+    else alert("Fill the highlighted foam fields.");
     return;
   }
 
@@ -1318,6 +2427,11 @@ els.btnLoad.addEventListener("click", async ()=>{
 els.btnReset.addEventListener("click", ()=>{
   clearMissing();
 
+  document.getElementById("ptFoam").checked = false;
+  document.getElementById("ptWool").checked = false;
+  currentMode = null;
+  updateMode();
+
   els.reqName.value="";
   els.sampleName.value="";
   els.foamColor.value="";
@@ -1345,6 +2459,10 @@ els.btnReset.addEventListener("click", ()=>{
 
   // if data is still loaded, keep export enabled
   els.btnDownload.disabled = !wb;
+
+  if (susoAgentMode && wb && els.chatLog){
+    startSusoSession();
+  }
 });
 
 els.btnDownload.addEventListener("click", exportTestBOM);
@@ -1380,7 +2498,17 @@ document.querySelectorAll('input[name="prodType"]').forEach(r =>
   r.addEventListener("change", ()=>{ clearMissing(); updateMode(); })
 );
 
+if (els.btnSusoRun) els.btnSusoRun.addEventListener("click", runSusoCommand);
+if (els.susoInput) els.susoInput.addEventListener("keydown", (ev) => {
+  if (ev.key === "Enter"){ ev.preventDefault(); runSusoCommand(); }
+});
+
 (function init(){
+  document.getElementById("ptFoam").checked = false;
+  document.getElementById("ptWool").checked = false;
+  currentMode = null;
+  updateMode();
+
   setStatus("Not loaded", null);
   showDebug("—");
   setSelectOptions(els.foamColor, [], "Load data first", false);
