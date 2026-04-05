@@ -1952,6 +1952,11 @@ function escapeChatHtml(s){
     .replace(/>/g, "&gt;");
 }
 
+/** Strip asterisks so echoed values do not break **…** rendering in appendChat. */
+function susoSanitizeForBoldEcho(s){
+  return String(s).replace(/\*+/g, "");
+}
+
 function appendChat(role, text){
   if (!els.chatLog) return;
   const div = document.createElement("div");
@@ -2321,7 +2326,8 @@ function runSusoCommand(){
   if (tryResult.applied && tryResult.value){
     const lab = susoStepShortLabel(tryResult.step);
     const tail = lab ? " (" + lab + ")" : "";
-    appendChat("suso", "Got it — **" + tryResult.value + "**" + tail + ".");
+    const shown = susoSanitizeForBoldEcho(tryResult.value);
+    appendChat("suso", "Got it — **" + shown + "**" + tail + ".");
   }
 
   const slot = getNextMissingSlot();
@@ -2332,6 +2338,13 @@ function runSusoCommand(){
     return;
   }
   if (slot.stepId === "need_load") return;
+
+  const stillOnSameStep = awaitingAtStart && slot.stepId === awaitingAtStart;
+  const hasChoices = slot.options && slot.options.length > 0;
+  const looksLikeCommand = /^(export|download|bom|reset|validate|why|help|\?|what\s+options)/i.test(text.trim());
+  if (stillOnSameStep && !tryResult.applied && hasChoices && !looksLikeCommand && text.length < 240){
+    appendChat("suso", "I didn’t match that to the current question—pick one of the options below (or repeat the wording from the list).");
+  }
 
   appendChat("suso", slot.prompt + formatOptionsForPrompt(slot.options));
 }
