@@ -1578,7 +1578,39 @@ function susoScrubForFoamColorScan(s){
     .replace(/\bcanvas\s+backing\b/gi, " ");
 }
 
-/** Longest / composite swatches first so BLUE/GREY wins over BLUE; WHITE/TEAL over WHITE. */
+function susoEscapeRe(s){
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * True if user text matches a catalog foam color. Slash composites (ORANGE/GREY) also match
+ * "orange grey", "orange / grey", and either word order for two-part swatches.
+ * Single-token colors use word boundaries so "orange grey" does not resolve to GREY alone.
+ */
+function susoCatalogColorPhraseMatchesHay(hay, catalogColor){
+  const hayLow = String(hay || "").toLowerCase();
+  const lc = norm(catalogColor).toLowerCase();
+  if (!lc || lc.length < 2) return false;
+  if (lc.includes("/")){
+    const parts = lc.split("/").map(p => p.trim()).filter(Boolean);
+    if (parts.length < 2) return false;
+    const slashFlex = parts.map(p => susoEscapeRe(p)).join("\\s*\\/\\s*");
+    if (new RegExp(slashFlex, "i").test(hayLow)) return true;
+    if (parts.length === 2){
+      const [a, b] = parts;
+      const s1 = "\\b" + susoEscapeRe(a) + "\\b\\s+\\b" + susoEscapeRe(b) + "\\b";
+      const s2 = "\\b" + susoEscapeRe(b) + "\\b\\s+\\b" + susoEscapeRe(a) + "\\b";
+      if (new RegExp(s1, "i").test(hayLow) || new RegExp(s2, "i").test(hayLow)) return true;
+    } else {
+      const spacePat = parts.map(p => "\\b" + susoEscapeRe(p) + "\\b").join("\\s+");
+      if (new RegExp(spacePat, "i").test(hayLow)) return true;
+    }
+    return false;
+  }
+  return new RegExp("\\b" + susoEscapeRe(lc) + "\\b", "i").test(hayLow);
+}
+
+/** Longest / composite swatches first so ORANGE/GREY wins over GREY when user says "orange grey". */
 function susoMatchFoamCatalogColor(lowScrubbed){
   if (!foamRows.length || !String(lowScrubbed || "").trim()) return null;
   const colors = uniqSorted(foamRows, COL.foam_color)
@@ -1586,14 +1618,7 @@ function susoMatchFoamCatalogColor(lowScrubbed){
     .sort((a, b) => norm(b).length - norm(a).length);
   const hay = String(lowScrubbed);
   for (const c of colors){
-    const lc = norm(c).toLowerCase();
-    if (lc.length < 2) continue;
-    if (lc.includes("/")){
-      const flex = lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "\\s*\\/\\s*");
-      if (new RegExp(flex, "i").test(hay)) return c;
-    } else {
-      if (new RegExp("\\b" + lc.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\b", "i").test(hay)) return c;
-    }
+    if (susoCatalogColorPhraseMatchesHay(hay, c)) return c;
   }
   return null;
 }
@@ -1994,6 +2019,26 @@ function matchOptionFromUserText(text, options){
   return null;
 }
 
+/** Foam catalog colors: prefer longest match; composite ORANGE/GREY beats GREY for "orange grey". */
+function matchFoamCatalogColorFromUserText(text, options){
+  if (!options || !options.length) return null;
+  const low = susoNormalizeNumericText(norm(text)).toLowerCase();
+  const mNum = /^\s*#?\s*(\d+)\s*$/.exec(low);
+  if (mNum){
+    const i = parseInt(mNum[1], 10) - 1;
+    if (i >= 0 && i < options.length) return options[i];
+  }
+  const sorted = options.slice().sort((a, b) => norm(b).length - norm(a).length);
+  for (const o of sorted){
+    const ou = norm(o).toLowerCase();
+    if (low === ou || ou === low) return o;
+  }
+  for (const o of sorted){
+    if (susoCatalogColorPhraseMatchesHay(low, o)) return o;
+  }
+  return null;
+}
+
 function susoStepShortLabel(stepId){
   const map = {
     prodType: "product type",
@@ -2101,7 +2146,7 @@ function tryApplyStepAnswer(text, step){
   let pick = opts.length ? matchOptionFromUserText(text, opts) : null;
   if (step === "foamColor" && opts.length){
     const scrubbedAnswer = susoScrubForFoamColorScan(norm(text).toLowerCase());
-    pick = matchOptionFromUserText(scrubbedAnswer, opts);
+    pick = matchFoamCatalogColorFromUserText(scrubbedAnswer, opts);
   }
 
   if (step === "foamColor" && pick){ els.foamColor.value = pick; recomputeFoam(); return { applied: true, value: pick, step }; }
