@@ -1716,6 +1716,12 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     }
   }
 
+  if (!woolish && geoRows.length && (fields.prodType === "foam" || currentMode === "foam" || /\bfoam\b/.test(low))){
+    const wheels = uniqSorted(geoRows, COL.geo_wheel).slice().sort((a, b) => norm(b).length - norm(a).length);
+    const wPick = matchOptionFromUserText(low, wheels);
+    if (wPick) fields.foamWheel = wPick;
+  }
+
   if (fields._thicknessNum != null && foamRows.length){
     const thkOpts = fields.foamColor
       ? uniqSorted(foamRowsByColor(fields.foamColor), COL.foam_thickness)
@@ -1741,9 +1747,9 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
   }
 
   if (!woolish && fields._padNum != null && geoRows.length && fields._padNum < 72){
-    const wheel = els.foamWheel.value;
-    const pads = wheel
-      ? splitMaybeComma(uniqSorted(geoRowsByWheel(wheel), COL.geo_padSizes).join(","))
+    const wheelRef = fields.foamWheel || els.foamWheel.value;
+    const pads = wheelRef
+      ? splitMaybeComma(uniqSorted(geoRowsByWheel(wheelRef), COL.geo_padSizes).join(","))
       : [...new Set(geoRows.flatMap(r => splitMaybeComma(r[COL.geo_padSizes])))];
     const asStr = String(fields._padNum);
     const hit = pads.find(p => Math.abs(toNum(p) - fields._padNum) < 1e-6 || normU(p) === normU(asStr))
@@ -1785,6 +1791,15 @@ function susoInferFieldsFromText(low, raw, semantic, phraseMatches){
     const orientFromText = fields.woolOrientation && !semantic.orientation && /\b(curved|flat)\b/i.test(low);
     if (bits.length && (multiField || tentativeOd || orientFromText)){
       confirmations.push("From your message I’m using " + bits.join(" and ") + ". **Tell me if any of that’s wrong.**");
+    }
+  }
+
+  if (!woolish && (fields.foamWheel || fields.foamPadSize)){
+    const bits = [];
+    if (fields.foamWheel) bits.push("**wheel " + String(fields.foamWheel).replace(/\*+/g, "") + "**");
+    if (fields.foamPadSize) bits.push("**pad " + String(fields.foamPadSize).replace(/\*+/g, "") + "**");
+    if (bits.length){
+      confirmations.push("From your message I’m using " + bits.join(" and ") + " for foam. **Tell me if any of that’s wrong.**");
     }
   }
 
