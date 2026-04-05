@@ -311,11 +311,101 @@
       clip:rect(0,0,0,0);
       border:0;
     }
+
+    .app-shell-nav{
+      margin-bottom: 14px;
+    }
+    .app-shell-nav label{
+      min-width: 120px;
+      text-align: center;
+    }
+    .view-panel.hidden{ display: none !important; }
+
+    .sched-toolbar{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 14px;
+    }
+    .sched-toolbar .field{ min-width: 160px; }
+    .sched-toolbar label{ font-size: 12px; margin-bottom: 4px; }
+    .sched-table{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .sched-table th,
+    .sched-table td{
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .sched-table th{
+      background: #f8fafc;
+      font-weight: 650;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .02em;
+      color: #334155;
+    }
+    .sched-table code{ font-size: 12px; }
+    .cardish{
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      padding: 12px 14px;
+      margin: 10px 0;
+      background: #fafbfc;
+    }
+    .sched-day-hd{
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .sched-days ul{
+      margin: 0;
+      padding-left: 18px;
+    }
+    .sched-days li{ margin: 4px 0; font-size: 13px; }
+    .sched-qty{
+      font-weight: 700;
+      color: var(--accent);
+      margin-right: 4px;
+    }
+    .sched-meta{ font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+    .sched-warn{
+      border-color: rgba(185,28,28,.35);
+      background: rgba(185,28,28,.06);
+      color: #7f1d1d;
+    }
+    .sched-warn ul{ margin: 8px 0 0; padding-left: 18px; }
+    .sched-late-tag{
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: #9a3412;
+      background: rgba(154, 52, 18, .12);
+      border: 1px solid rgba(154, 52, 18, .35);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
   </style>
 </head>
 
 <body>
   <div class="wrap">
+    <div class="seg app-shell-nav" role="tablist" aria-label="App area">
+      <input type="radio" name="appView" id="tabViewConfig" value="config" checked>
+      <label for="tabViewConfig">Configurator</label>
+      <input type="radio" name="appView" id="tabViewSchedule" value="schedule">
+      <label for="tabViewSchedule">Job scheduler</label>
+    </div>
+
+    <div id="viewConfigurator" class="view-panel">
     <h2>LCM Sample Configurator</h2>
     <p class="muted" style="margin:0 0 14px;">Suso is your selector: it asks targeted questions until your sample is fully resolved. Sign in, load the catalog, then answer in plain language.</p>
 
@@ -496,6 +586,43 @@
       </div>
     </div>
 
+    </div>
+    </div>
+
+    <div id="viewScheduler" class="view-panel hidden">
+      <h2>Job scheduler <span class="muted" style="font-size:14px;font-weight:500;text-transform:none;">(mock BOM · day-by-day)</span></h2>
+      <p class="muted" style="margin:0 0 14px;">
+        Load sample orders for a month, set a shared daily part capacity, and build a backward-from-due-date plan.
+        This view is separate from the catalog configurator and does not change Suso or document Q&amp;A.
+      </p>
+
+      <div class="card">
+        <div class="sched-toolbar">
+          <div class="field">
+            <label for="schedUnitsPerDay">Parts per day (shop capacity)</label>
+            <input type="number" id="schedUnitsPerDay" min="1" step="1" value="24">
+          </div>
+          <button type="button" id="schedLoadMock" class="btn-ghost">Load sample month (mock BOM)</button>
+          <button type="button" id="schedImportCsvBtn" class="btn-ghost">Import CSV…</button>
+          <input type="file" id="schedImportCsvFile" accept=".csv,text/csv,text/plain" class="hidden">
+          <button type="button" id="schedBuild" class="btn-primary">Build day-by-day plan</button>
+          <button type="button" id="schedExportCsv" class="btn-ghost" disabled>Export schedule CSV</button>
+        </div>
+        <p class="muted" style="margin:10px 0 0;font-size:13px;">
+          CSV columns: <code>partId</code>, <code>qty</code>, <code>dueDate</code> (YYYY-MM-DD), plus optional <code>description</code>, <code>customer</code>.
+          Export includes scheduled rows and an <code>### OVERFLOWS ###</code> section when needed.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 10px;">Open jobs (BOM lines)</h3>
+        <div id="schedBomPreview"></div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin:0 0 10px;">Schedule</h3>
+        <div id="schedDayPlan"></div>
+      </div>
     </div>
 
 <script>
@@ -1509,6 +1636,10 @@ window.SUSO_ADAPTER_DEPS = {
 <script type="module" src="js/suso/engine/bind.js"></script>
 <script type="module" src="js/suso/bind-llm.js"></script>
 <script type="module" src="js/suso/bind-adapters.js"></script>
+<script type="module">
+import { initJobSchedulerPanel } from "./js/lcm/job-scheduler.js";
+initJobSchedulerPanel();
+</script>
 
   </div>
 </body>
